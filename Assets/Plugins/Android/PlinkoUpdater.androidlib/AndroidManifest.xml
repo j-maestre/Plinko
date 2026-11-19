@@ -3,6 +3,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.plinko.updater.manifest">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Android 12+: permite actualizarse sin confirmación cuando la app ya es su propia instaladora -->
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
 
     <application>
         <!-- Comparte el APK descargado con el instalador del sistema (content://<paquete>.apkprovider/...) -->
@@ -11,5 +13,9 @@
             android:authorities="${applicationId}.apkprovider"
             android:exported="false"
             android:grantUriPermissions="true" />
+        <!-- Resultado de la sesión de instalación -->
+        <receiver
+            android:name="com.plinko.updater.InstallReceiver"
+            android:exported="false" />
     </application>
 </manifest>

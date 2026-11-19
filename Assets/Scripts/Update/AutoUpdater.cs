@@ -8,31 +8,33 @@ using UnityEngine.UI;
 namespace Plinko
 {
     /// <summary>
-    /// Auto-actualizador para builds de prueba en Android: consulta la última release de GitHub,
-    /// y si hay una versión más nueva la descarga y abre el instalador del sistema.
+    /// Auto-actualizador para builds de prueba en Android, sin preguntar:
+    /// al arrancar (y cada 15 min) consulta la última release de GitHub; si su tag es más nuevo,
+    /// descarga el APK en segundo plano y lo instala con PackageInstaller.
     ///
-    /// - Android no permite instalar en silencio: el usuario confirma en la pantalla del sistema.
-    /// - Se desactiva si la app viene de Google Play (sus normas prohíben auto-actualizarse por fuera)
-    ///   o si se define PLINKO_NO_UPDATER en los Scripting Define Symbols.
-    /// - El repo debe ser público y la release tener un .apk adjunto; el tag es la versión (v1.2.0).
-    /// - Para que se instale encima: versionCode mayor y misma firma (mismo keystore).
+    /// - Android 12+: a partir de la primera actualización (cuando la app ya es su propia instaladora)
+    ///   se instala sin confirmar. La primera vez, o en Android antiguos, el sistema pide pulsar "Actualizar".
+    /// - Hace falta permitir una vez "Instalar apps desconocidas" para Plinko (Android 8+).
+    /// - Se desactiva en instalaciones desde Google Play o con el define PLINKO_NO_UPDATER.
+    /// - Para instalar encima: versionCode mayor y misma firma.
     /// </summary>
     public class AutoUpdater : MonoBehaviour
     {
         const string LatestReleaseUrl = "https://api.github.com/repos/j-maestre/Plinko/releases/latest";
         const string ApkFileName = "update.apk";
+        const float FirstCheckDelay = 3f;
+        const float CheckInterval = 15 * 60f;
 
 #pragma warning disable 0649 // los rellena JsonUtility
-        [Serializable] class Release { public string tag_name; public string body; public Asset[] assets; }
-        [Serializable] class Asset { public string name; public string browser_download_url; public long size; }
+        [Serializable] class Release { public string tag_name; public Asset[] assets; }
+        [Serializable] class Asset { public string name; public string browser_download_url; }
 #pragma warning restore 0649
 
-        RectTransform dialog;
-        Text titleText, bodyText, progressText;
-        Button acceptButton, laterButton;
-        Text acceptLabel;
-        string apkUrl, apkPath, newVersion;
-        bool waitingForPermission;
+        RectTransform pill;
+        Text pillText;
+        Button pillButton;
+        string apkPath;
+        bool busy, waitingForPermission;
 
 #if UNITY_ANDROID && !UNITY_EDITOR && !PLINKO_NO_UPDATER
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -47,31 +49,40 @@ namespace Plinko
         IEnumerator Start()
         {
             if (IsFromPlayStore()) { Destroy(gameObject); yield break; }
-            yield return new WaitForSeconds(3f); // que el juego arranque primero
+            BuildPill();
+            yield return new WaitForSeconds(FirstCheckDelay);
+            while (true)
+            {
+                if (!busy) yield return CheckAndUpdate();
+                yield return new WaitForSeconds(CheckInterval);
+            }
+        }
 
+        IEnumerator CheckAndUpdate()
+        {
+            string url = null, version = null;
             using (var req = UnityWebRequest.Get(LatestReleaseUrl))
             {
                 req.SetRequestHeader("Accept", "application/vnd.github+json");
                 req.SetRequestHeader("User-Agent", "Plinko-Updater");
                 req.timeout = 15;
                 yield return req.SendWebRequest();
-                if (req.result != UnityWebRequest.Result.Success) { Debug.Log("[Updater] Sin respuesta: " + req.error); yield break; }
+                if (req.result != UnityWebRequest.Result.Success) yield break;
 
-                Release release;
-                try { release = JsonUtility.FromJson<Release>(req.downloadHandler.text); }
-                catch (Exception e) { Debug.Log("[Updater] JSON no válido: " + e.Message); yield break; }
+                Release release = null;
+                try { release = JsonUtility.FromJson<Release>(req.downloadHandler.text); } catch { }
                 if (release == null || string.IsNullOrEmpty(release.tag_name)) yield break;
 
-                newVersion = release.tag_name.TrimStart('v', 'V');
-                if (CompareVersions(newVersion, Application.version) <= 0) yield break; // ya actualizado
-
+                version = release.tag_name.TrimStart('v', 'V');
+                if (CompareVersions(version, Application.version) <= 0) yield break; // ya al día
                 if (release.assets != null)
                     foreach (var a in release.assets)
-                        if (a.name.EndsWith(".apk", StringComparison.OrdinalIgnoreCase)) { apkUrl = a.browser_download_url; break; }
-                if (string.IsNullOrEmpty(apkUrl)) yield break;
-
-                ShowDialog(release);
+                        if (a.name.EndsWith(".apk", StringComparison.OrdinalIgnoreCase)) { url = a.browser_download_url; break; }
             }
+            if (string.IsNullOrEmpty(url)) yield break;
+
+            busy = true;
+            yield return Download(url, version);
         }
 
         /// <summary>Compara "1.2.10" con "1.2.9" numéricamente. &gt;0 si a es más nueva.</summary>
@@ -90,32 +101,29 @@ namespace Plinko
 
         // ------------------------------------------------------------------ Descarga e instalación
 
-        IEnumerator Download()
+        IEnumerator Download(string url, string version)
         {
-            acceptButton.interactable = false;
-            laterButton.gameObject.SetActive(false);
             apkPath = Path.Combine(CallBridge<string>("cacheDir"), ApkFileName);
             if (File.Exists(apkPath)) File.Delete(apkPath);
 
-            using (var req = new UnityWebRequest(apkUrl, UnityWebRequest.kHttpVerbGET))
+            using (var req = new UnityWebRequest(url, UnityWebRequest.kHttpVerbGET))
             {
                 req.downloadHandler = new DownloadHandlerFile(apkPath) { removeFileOnAbort = true };
                 req.SendWebRequest();
                 while (!req.isDone)
                 {
-                    progressText.text = "Descargando… " + Mathf.FloorToInt(req.downloadProgress * 100) + "%";
+                    ShowPill("Descargando v" + version + "…  " + Mathf.FloorToInt(req.downloadProgress * 100) + "%");
                     yield return null;
                 }
                 if (req.result != UnityWebRequest.Result.Success)
                 {
-                    progressText.text = "Error al descargar: " + req.error;
-                    acceptButton.interactable = true;
-                    acceptLabel.text = "Reintentar";
-                    laterButton.gameObject.SetActive(true);
+                    ShowPill("No se pudo descargar la actualización", 4f);
+                    busy = false;
                     yield break;
                 }
             }
-            progressText.text = "Descarga completa";
+            ShowPill("Instalando v" + version + "…");
+            yield return new WaitForSeconds(0.5f);
             TryInstall();
         }
 
@@ -123,15 +131,45 @@ namespace Plinko
         {
             if (!CallBridge<bool>("canInstall"))
             {
-                // Android 8+: hay que permitir "instalar apps desconocidas" a este juego una vez
+                // Android 8+: el usuario tiene que permitir una vez que Plinko instale actualizaciones
                 waitingForPermission = true;
-                progressText.text = "Permite \"Instalar apps desconocidas\" para Plinko y vuelve al juego.";
-                CallBridgeVoid("openInstallPermission");
+                ShowPill("Toca aquí y permite \"Instalar apps desconocidas\" para actualizar", 0, true);
                 return;
             }
             waitingForPermission = false;
-            progressText.text = "Abriendo el instalador…";
-            CallBridgeVoid("install", ApkFileName);
+            if (GameManager.Instance != null) GameManager.Instance.Save(); // la instalación cierra la app
+
+            try
+            {
+                CallBridgeVoid("installSession", apkPath);
+                StartCoroutine(WatchForError());
+            }
+            catch (Exception e)
+            {
+                // si la sesión falla, se usa el instalador clásico (siempre pide confirmar)
+                Debug.Log("[Updater] PackageInstaller falló, se usa el instalador clásico: " + e.Message);
+                CallBridgeVoid("install", ApkFileName);
+                HidePill();
+                busy = false;
+            }
+        }
+
+        IEnumerator WatchForError()
+        {
+            for (float t = 0; t < 30f; t += 1f)
+            {
+                yield return new WaitForSeconds(1f);
+                string err = null;
+                try { err = CallBridgeStatic<string>("takeLastError"); } catch { }
+                if (!string.IsNullOrEmpty(err))
+                {
+                    ShowPill("No se pudo instalar: " + err, 5f);
+                    busy = false;
+                    yield break;
+                }
+            }
+            HidePill();
+            busy = false;
         }
 
         void OnApplicationFocus(bool focus)
@@ -154,6 +192,12 @@ namespace Plinko
                 return bridge.CallStatic<T>(method, act);
         }
 
+        static T CallBridgeStatic<T>(string method)
+        {
+            using (var bridge = new AndroidJavaClass("com.plinko.updater.UpdaterBridge"))
+                return bridge.CallStatic<T>(method);
+        }
+
         static void CallBridgeVoid(string method, params object[] extra)
         {
             using (var bridge = new AndroidJavaClass("com.plinko.updater.UpdaterBridge"))
@@ -172,9 +216,9 @@ namespace Plinko
             catch { return false; }
         }
 
-        // ------------------------------------------------------------------ Diálogo
+        // ------------------------------------------------------------------ Aviso discreto
 
-        void ShowDialog(Release release)
+        void BuildPill()
         {
             var canvasGo = new GameObject("UpdaterCanvas", typeof(RectTransform));
             canvasGo.transform.SetParent(transform, false);
@@ -186,31 +230,28 @@ namespace Plinko
             scaler.referenceResolution = new Vector2(1080, 1920);
             scaler.matchWidthOrHeight = 0.5f;
             canvasGo.AddComponent<GraphicRaycaster>();
-            var root = (RectTransform)canvasGo.transform;
 
-            var backdrop = UIFactory.Stretch("Backdrop", root);
-            UIFactory.Image(backdrop, new Color(0, 0, 0.04f, 0.8f), false);
-
-            dialog = UIFactory.Card("Dialog", root, new Vector2(0.08f, 0.32f), new Vector2(0.92f, 0.68f), UIFactory.Panel, 10);
-            titleText = UIFactory.Text(UIFactory.Rect("Title", dialog, new Vector2(0, 0.78f), new Vector2(1, 0.95f)),
-                "Nueva versión " + release.tag_name, 44, UIFactory.Accent, TextAnchor.MiddleCenter, true);
-            string notes = string.IsNullOrEmpty(release.body) ? "" : "\n\n" + Truncate(release.body, 220);
-            bodyText = UIFactory.Text(UIFactory.Inset(UIFactory.Rect("Body", dialog, new Vector2(0, 0.38f), new Vector2(1, 0.78f)), 40, 0, 40, 0),
-                "Tienes la " + Application.version + ". ¿Descargar e instalar ahora?" + notes, 26, UIFactory.TextMain, TextAnchor.UpperCenter);
-            bodyText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            bodyText.verticalOverflow = VerticalWrapMode.Truncate;
-            progressText = UIFactory.Text(UIFactory.Inset(UIFactory.Rect("Progress", dialog, new Vector2(0, 0.27f), new Vector2(1, 0.38f)), 30, 0, 30, 0),
-                "", 26, UIFactory.TextDim, TextAnchor.MiddleCenter);
-            progressText.horizontalOverflow = HorizontalWrapMode.Wrap;
-
-            laterButton = UIFactory.Button(UIFactory.Rect("Later", dialog, new Vector2(0.06f, 0.06f), new Vector2(0.44f, 0.24f)),
-                UIFactory.CardDarkColor, out _, "Luego", 32);
-            laterButton.onClick.AddListener(() => Destroy(gameObject));
-            acceptButton = UIFactory.Button(UIFactory.Rect("Accept", dialog, new Vector2(0.52f, 0.06f), new Vector2(0.94f, 0.24f)),
-                UIFactory.Accent, out acceptLabel, "Actualizar", 32);
-            acceptButton.onClick.AddListener(() => StartCoroutine(Download()));
+            float y = BoardView.BottomUI + 0.07f;
+            pill = UIFactory.Rect("UpdatePill", canvasGo.transform, new Vector2(0.1f, y), new Vector2(0.9f, y + 0.035f));
+            var img = UIFactory.Image(pill, new Color(0.05f, 0.08f, 0.18f, 0.92f));
+            pillButton = pill.gameObject.AddComponent<Button>();
+            pillButton.targetGraphic = img;
+            pillButton.onClick.AddListener(() => { if (waitingForPermission) CallBridgeVoid("openInstallPermission"); });
+            pillText = UIFactory.Text(UIFactory.Inset(UIFactory.Stretch("Text", pill), 20, 0, 20, 0), "", 24, UIFactory.TextMain, TextAnchor.MiddleCenter);
+            pillText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            pill.gameObject.SetActive(false);
         }
 
-        static string Truncate(string s, int max) => s.Length <= max ? s : s.Substring(0, max) + "…";
+        void ShowPill(string text, float hideAfter = 0, bool clickable = false)
+        {
+            pill.gameObject.SetActive(true);
+            pillText.text = text;
+            pillButton.interactable = clickable;
+            pill.GetComponent<Image>().raycastTarget = clickable; // si no, no bloquea toques al juego
+            CancelInvoke(nameof(HidePill));
+            if (hideAfter > 0) Invoke(nameof(HidePill), hideAfter);
+        }
+
+        void HidePill() => pill.gameObject.SetActive(false);
     }
 }
