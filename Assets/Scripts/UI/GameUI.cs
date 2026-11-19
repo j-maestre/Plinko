@@ -214,9 +214,9 @@ namespace Plinko
 
         void BuildTopBar()
         {
-            var bar = UIFactory.Rect("TopBar", root, new Vector2(0, 1f - BoardView.TopUI), Vector2.one);
+            var bar = UIFactory.Rect("TopBar", root, new Vector2(0, BoardView.TopEdge - BoardView.TopUI), new Vector2(1, BoardView.TopEdge));
             var body = UIFactory.Card("TopCard", bar, Vector2.zero, Vector2.one, UIFactory.Panel, 6);
-            UIFactory.Inset((RectTransform)body.parent, 14, 6, 14, -40); // se esconde por arriba
+            UIFactory.Inset((RectTransform)body.parent, 14, 6, 14, -400); // cubre también la zona de la barra de estado
 
             // Dinero centrado y, debajo en pequeño, el dinero por segundo
             var moneyArea = UIFactory.Rect("MoneyArea", body, new Vector2(0.25f, 0.36f), new Vector2(0.75f, 0.97f));
@@ -303,7 +303,7 @@ namespace Plinko
 
         void BuildOverloadBar()
         {
-            float top = 1f - BoardView.TopUI;
+            float top = BoardView.TopEdge - BoardView.TopUI;
             overloadBar = UIFactory.Rect("Overload", root, new Vector2(0.05f, top - BoardView.OverloadBar + 0.004f), new Vector2(0.95f, top - 0.004f));
             overloadGlow = UIFactory.Image(UIFactory.Inset(UIFactory.Stretch("Glow", overloadBar), -10, -10, -10, -10), new Color(1, 1, 1, 0));
             overloadGlow.raycastTarget = false;
@@ -334,7 +334,7 @@ namespace Plinko
 
         void BuildRushLabel()
         {
-            float top = 1f - BoardView.TopUI - BoardView.OverloadBar;
+            float top = BoardView.TopEdge - BoardView.TopUI - BoardView.OverloadBar;
             var rt = UIFactory.Rect("Rush", root, new Vector2(0.25f, top - 0.04f), new Vector2(0.75f, top - 0.004f));
             UIFactory.Image(rt, new Color(0.05f, 0.25f, 0.35f, 0.85f)).raycastTarget = false;
             rushText = UIFactory.Text(UIFactory.Stretch("Text", rt), "", 28, RushColor, TextAnchor.MiddleCenter, true);

@@ -20,6 +20,15 @@ namespace Plinko
 
         // Fracciones de pantalla reservadas para la UI (arriba y abajo)
         public const float TopUI = 0.11f;
+
+        /// <summary>
+        /// Hueco superior por la barra de estado / notch (fracción de pantalla), más un pequeño margen.
+        /// En el editor la zona segura es toda la pantalla, así que solo queda el margen.
+        /// </summary>
+        public static float SafeTop => Mathf.Clamp01((Screen.height - Screen.safeArea.yMax) / Mathf.Max(1f, Screen.height)) + 0.01f;
+
+        /// <summary>Borde superior utilizable (1 = arriba del todo).</summary>
+        public static float TopEdge => 1f - SafeTop;
         public const float OverloadBar = 0.035f;   // barra de Sobrecarga bajo la barra superior
         public const float BottomUI = 0.44f;
 
@@ -315,7 +324,7 @@ namespace Plinko
             float height = top - bottom;
 
             float aspect = (float)Screen.width / Mathf.Max(1, Screen.height);
-            float frac = 1f - TopUI - OverloadBar - BottomUI;
+            float frac = TopEdge - TopUI - OverloadBar - BottomUI;
             float size = Mathf.Max(width / (2f * aspect), height / (2f * frac)) * 1.03f;
 
             cam.orthographic = true;
