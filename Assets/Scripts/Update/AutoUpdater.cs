@@ -46,9 +46,14 @@ namespace Plinko
         }
 #endif
 
+        bool firstCheck = true;
+
         IEnumerator Start()
         {
-            if (IsFromPlayStore()) { Destroy(gameObject); yield break; }
+            Debug.Log("[Updater] Iniciado. Versión instalada: " + Application.version);
+            bool fromPlay = false;
+            try { fromPlay = IsFromPlayStore(); } catch (Exception e) { Debug.LogWarning("[Updater] " + e); }
+            if (fromPlay) { Destroy(gameObject); yield break; }
             BuildPill();
             yield return new WaitForSeconds(FirstCheckDelay);
             while (true)
@@ -61,25 +66,46 @@ namespace Plinko
         IEnumerator CheckAndUpdate()
         {
             string url = null, version = null;
+            bool verbose = firstCheck;   // en la primera comprobación se informa de todo (fase de pruebas)
+            firstCheck = false;
+            if (verbose) ShowPill("Buscando actualizaciones… (tienes la " + Application.version + ")");
             using (var req = UnityWebRequest.Get(LatestReleaseUrl))
             {
                 req.SetRequestHeader("Accept", "application/vnd.github+json");
-                req.SetRequestHeader("User-Agent", "Plinko-Updater");
                 req.timeout = 15;
                 yield return req.SendWebRequest();
-                if (req.result != UnityWebRequest.Result.Success) yield break;
+                if (req.result != UnityWebRequest.Result.Success)
+                {
+                    Debug.LogWarning("[Updater] Error consultando GitHub: " + req.error);
+                    if (verbose) ShowPill("No se pudo consultar GitHub: " + req.error, 6f);
+                    yield break;
+                }
 
                 Release release = null;
-                try { release = JsonUtility.FromJson<Release>(req.downloadHandler.text); } catch { }
-                if (release == null || string.IsNullOrEmpty(release.tag_name)) yield break;
+                try { release = JsonUtility.FromJson<Release>(req.downloadHandler.text); }
+                catch (Exception e) { Debug.LogWarning("[Updater] JSON: " + e.Message); }
+                if (release == null || string.IsNullOrEmpty(release.tag_name))
+                {
+                    if (verbose) ShowPill("Respuesta de GitHub no válida", 5f);
+                    yield break;
+                }
 
                 version = release.tag_name.TrimStart('v', 'V');
-                if (CompareVersions(version, Application.version) <= 0) yield break; // ya al día
+                Debug.Log("[Updater] Última release: " + version + " / instalada: " + Application.version);
+                if (CompareVersions(version, Application.version) <= 0)
+                {
+                    if (verbose) ShowPill("Tienes la última versión (" + Application.version + ")", 3f);
+                    yield break; // ya al día
+                }
                 if (release.assets != null)
                     foreach (var a in release.assets)
                         if (a.name.EndsWith(".apk", StringComparison.OrdinalIgnoreCase)) { url = a.browser_download_url; break; }
             }
-            if (string.IsNullOrEmpty(url)) yield break;
+            if (string.IsNullOrEmpty(url))
+            {
+                ShowPill("La release v" + version + " no tiene APK adjunto", 5f);
+                yield break;
+            }
 
             busy = true;
             yield return Download(url, version);
@@ -103,8 +129,18 @@ namespace Plinko
 
         IEnumerator Download(string url, string version)
         {
-            apkPath = Path.Combine(CallBridge<string>("cacheDir"), ApkFileName);
-            if (File.Exists(apkPath)) File.Delete(apkPath);
+            try
+            {
+                apkPath = Path.Combine(CallBridge<string>("cacheDir"), ApkFileName);
+                if (File.Exists(apkPath)) File.Delete(apkPath);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[Updater] " + e);
+                ShowPill("Error preparando la descarga: " + e.Message, 8f);
+                busy = false;
+                yield break;
+            }
 
             using (var req = new UnityWebRequest(url, UnityWebRequest.kHttpVerbGET))
             {
@@ -117,7 +153,8 @@ namespace Plinko
                 }
                 if (req.result != UnityWebRequest.Result.Success)
                 {
-                    ShowPill("No se pudo descargar la actualización", 4f);
+                    Debug.LogWarning("[Updater] Descarga fallida: " + req.error);
+                    ShowPill("No se pudo descargar: " + req.error, 6f);
                     busy = false;
                     yield break;
                 }
@@ -129,7 +166,10 @@ namespace Plinko
 
         void TryInstall()
         {
-            if (!CallBridge<bool>("canInstall"))
+            bool canInstall;
+            try { canInstall = CallBridge<bool>("canInstall"); }
+            catch (Exception e) { ShowPill("Error comprobando permisos: " + e.Message, 8f); busy = false; return; }
+            if (!canInstall)
             {
                 // Android 8+: el usuario tiene que permitir una vez que Plinko instale actualizaciones
                 waitingForPermission = true;
