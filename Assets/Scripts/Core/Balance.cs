@@ -22,6 +22,16 @@ namespace Plinko
     /// </summary>
     public static class Balance
     {
+        // --- Secciones de mejoras (pestañas) ---
+        /// <summary>Precio para desbloquear cada pestaña. Se desbloquean en orden y no se pierden con el prestigio.</summary>
+        public static double TabUnlockCost(UpgradeCategory c) => c switch
+        {
+            UpgradeCategory.Rebotes => 75e3,
+            UpgradeCategory.Sobrecarga => 1e6,
+            UpgradeCategory.Multiplicadores => 25e6,
+            _ => 0,                                    // Bolas y Pinchos, desde el principio
+        };
+
         // --- Tablero ---
         public const int BaseRows = 8;
         public const int RowStep = 2;          // siempre filas pares -> número impar de cubos con uno central
@@ -31,32 +41,32 @@ namespace Plinko
         // --- Lanzamiento ---
         public const int BaseMaxBalls = 3;
         public const float ManualCooldown = 0.35f;
-        public static int MaxBalls(int lvl) => BaseMaxBalls + 3 * lvl;
-        public static float AutoInterval(int lvl) => lvl <= 0 ? 0f : Mathf.Max(0.05f, 1.5f * Mathf.Pow(0.78f, lvl - 1));
+        public static int MaxBalls(int lvl) => BaseMaxBalls + 4 * lvl;
+        public static float AutoInterval(int lvl) => lvl <= 0 ? 0f : Mathf.Max(0.05f, 1.5f * Mathf.Pow(0.75f, lvl - 1));
 
         // --- Pinchos ---
-        public static double PegFlat(int lvl) => 4 * lvl;                       // +1 por rebote y nivel
-        public static double PegPercent(int lvl) => 0.03 * lvl;            // +0.5% del valor de la bola por rebote
-        public static double BonusChance(int lvl) => Math.Min(0.5, 0.05 * lvl);
-        public static double BonusAmount(int lvl) => 0.05 + 0.05 * lvl;     // multiplicativo sobre el valor de la bola
-        public static double CritChance(int lvl) => 0.01 * lvl;           // hasta 5%
+        public static double PegFlat(int lvl) => 5 * lvl;                       // +1 por rebote y nivel
+        public static double PegPercent(int lvl) => 0.04 * lvl;            // +0.5% del valor de la bola por rebote
+        public static double BonusChance(int lvl) => Math.Min(0.54, 0.06 * lvl);
+        public static double BonusAmount(int lvl) => 0.06 + 0.06 * lvl;     // multiplicativo sobre el valor de la bola
+        public static double CritChance(int lvl) => 0.0125 * lvl;           // hasta 5%
         public const double CritMultiplier = 2.0;
         public const double GoldenPegMultiplier = 1.5;
 
         // --- Efectos por rebote ---
-        public static double LightningChance(int lvl) => 0.025 * lvl;      // hasta 15%
+        public static double LightningChance(int lvl) => 0.03 * lvl;      // hasta 15%
         public static int LightningHops(int lvl) => 3 + lvl;            // pinchos que activa el rayo
         public const double LightningHopValue = 0.10;                       // cada salto paga un 10% del valor de la bola
-        public static double ChargeChance(int lvl) => 0.015 * lvl;         // hasta 10%
+        public static double ChargeChance(int lvl) => 0.02 * lvl;         // hasta 10%
         public const double ChargedPegMultiplier = 1.5;
         public const float ChargeDuration = 4f;
         public static int MaxChargedPegs(int lvl) => 2 + lvl;
-        public static double EchoChance(int lvl) => 0.05 * lvl;             // hasta 30%
+        public static double EchoChance(int lvl) => 0.06 * lvl;             // hasta 30%
 
         // --- Sobrecarga (frenesí temporal) ---
-        public static float OverloadDuration(int lvl) => 12f + 4f * lvl;                // +1 s por nivel
-        public static double OverloadMultiplier(int lvl) => 3.0 + 2.0 * lvl;       // x3, +0.5 por nivel
-        public static float OverloadFillFactor(int lvl) => 1f / (1f + 0.4f * lvl); // se llena antes
+        public static float OverloadDuration(int lvl) => 12f + 5f * lvl;                // +1 s por nivel
+        public static double OverloadMultiplier(int lvl) => 3.0 + 2.5 * lvl;       // x3, +0.5 por nivel
+        public static float OverloadFillFactor(int lvl) => 1f / (1f + 0.5f * lvl); // se llena antes
         public const float OverloadLaunchBoost = 2f;      // auto-lanzador el doble de rápido
         public const float OverloadCapacityBoost = 1.5f;  // +50% bolas en pantalla
         public const float OverloadMinHits = 700f;        // rebotes mínimos para llenarla
@@ -70,7 +80,7 @@ namespace Plinko
         public const float RushMinInterval = 0.5f;    // sin auto-lanzador, la avalancha lanza igualmente
 
         // --- Bola dorada (aparece al lanzar con cierta probabilidad) ---
-        public static double GoldenBallChance(int lvl) => 0.05 * lvl;      // hasta 50%
+        public static double GoldenBallChance(int lvl) => 0.06 * lvl;      // hasta 50%
         public const double GoldenBallMultiplier = 5.0;
 
         // --- Cubos ---
@@ -78,7 +88,7 @@ namespace Plinko
         // Tres tipos de cubo: centrales (los 3 del medio), intermedios (los 2 siguientes a cada lado) y extremos (el resto)
         public const int GroupCenter = 0, GroupMiddle = 1, GroupEdge = 2;
         public static int BucketGroup(int k) => k <= 1 ? GroupCenter : k <= 3 ? GroupMiddle : GroupEdge;
-        static readonly double[] GroupBonusPerLevel = { 0.4, 1.0, 2.0 }; // los de los lados suben más por nivel
+        static readonly double[] GroupBonusPerLevel = { 0.5, 1.25, 2.5 }; // los de los lados suben más por nivel
         public static double BucketBonus(int group, int lvl) => GroupBonusPerLevel[group] * lvl;
 
         /// <summary>Probabilidad de que una bola caiga en un grupo (sin desvío), para el coste de su mejora.</summary>
@@ -90,7 +100,7 @@ namespace Plinko
         }
 
         // --- Desvío hacia los lados ---
-        public static double DriftChance(int lvl) => 0.06 * lvl;            // hasta 30% de rebotes forzados hacia fuera
+        public static double DriftChance(int lvl) => 0.07 * lvl;            // hasta 30% de rebotes forzados hacia fuera
 
         /// <summary>Multiplicador base del cubo a distancia k del centro. Centro x1, bordes más altos.</summary>
         public static double BaseBucketMultiplier(int rows, int k)

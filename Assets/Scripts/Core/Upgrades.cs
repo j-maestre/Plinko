@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Plinko
 {
-    public enum UpgradeCategory { Bolas, Pinchos, Rebotes, Multiplicadores, Sobrecarga }
+    public enum UpgradeCategory { Bolas, Pinchos, Rebotes, Sobrecarga, Multiplicadores }
 
     public class UpgradeDef
     {
@@ -72,58 +72,58 @@ namespace Plinko
                 new UpgradeDef
                 {
                     Id = UpgradeIds.AutoLauncher, Name = "Auto-lanzador", Desc = "Lanza bolas solo, sin tocar nada", Category = UpgradeCategory.Bolas,
-                    BaseCost = 50, Growth = 2.2, MaxLevel = 14,
+                    BaseCost = 50, Growth = 2.4, MaxLevel = 14,
                     Effect = l => l == 0 ? "Apagado" : (1f / Balance.AutoInterval(l)).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " bolas/s"
                 },
                 new UpgradeDef
                 {
                     Id = UpgradeIds.Capacity, Name = "Capacidad", Desc = "Más bolas cayendo a la vez", Category = UpgradeCategory.Bolas,
-                    BaseCost = 300, Growth = 2.2, MaxLevel = 40,
+                    BaseCost = 1500, Growth = 2.4, MaxLevel = 30,
                     Effect = l => Balance.MaxBalls(l) + " bolas en pantalla"
                 },
                 new UpgradeDef
                 {
                     Id = UpgradeIds.BallTier, Name = "Calidad de bola", Desc = "Bolas de más valor y más dinero por rebote", Category = UpgradeCategory.Bolas,
-                    BaseCost = 6000, Growth = 45, MaxLevel = Balance.Tiers.Length - 1,
+                    BaseCost = 20000, Growth = 45, MaxLevel = Balance.Tiers.Length - 1,
                     Effect = l => Balance.Tiers[l].Name + " (valor " + NumberFormat.Format(Balance.Tiers[l].Value) + ")"
                 },
                 new UpgradeDef
                 {
                     Id = UpgradeIds.GoldenBall, Name = "Bola dorada", Desc = "Probabilidad de lanzar una bola dorada que vale x5",
                     Category = UpgradeCategory.Bolas,
-                    BaseCost = 6000, Growth = 2.5, MaxLevel = 10,
+                    BaseCost = 150000, Growth = 2.7, MaxLevel = 9,
                     Effect = l => NumberFormat.Percent(Balance.GoldenBallChance(l)) + " de bola dorada"
                 },
                 new UpgradeDef
                 {
                     Id = UpgradeIds.PegFlat, Name = "Pinchos reforzados", Desc = "Dinero fijo cada vez que una bola toca un pincho", Category = UpgradeCategory.Pinchos,
-                    BaseCost = 200, Growth = 2.3, MaxLevel = 300,
+                    BaseCost = 200, Growth = 2.5, MaxLevel = 300,
                     Effect = l => "+" + NumberFormat.Format(Balance.PegFlat(l)) + " por rebote"
                 },
                 new UpgradeDef
                 {
                     Id = UpgradeIds.PegPercent, Name = "Pinchos resonantes", Desc = "Cada rebote da un % del valor actual de la bola", Category = UpgradeCategory.Pinchos,
-                    BaseCost = 150000, Growth = 2.3, MaxLevel = 34,
+                    BaseCost = 1000000, Growth = 2.5, MaxLevel = 34,
                     RequiresId = UpgradeIds.PegFlat, RequiresLevel = 10,
                     Effect = l => "+" + NumberFormat.Percent(Balance.PegPercent(l)) + " del valor por rebote"
                 },
                 new UpgradeDef
                 {
                     Id = UpgradeIds.BonusChance, Name = "Rebote potenciador", Desc = "Probabilidad de que un rebote aumente el valor de la bola", Category = UpgradeCategory.Rebotes,
-                    BaseCost = 10000, Growth = 2.5, MaxLevel = 10,
+                    BaseCost = 15000, Growth = 2.7, MaxLevel = 9,
                     Effect = l => NumberFormat.Percent(Balance.BonusChance(l)) + " prob. por rebote"
                 },
                 new UpgradeDef
                 {
                     Id = UpgradeIds.BonusAmount, Name = "Potencia del rebote", Desc = "Cuánto aumenta la bola cuando el rebote potencia", Category = UpgradeCategory.Rebotes,
-                    BaseCost = 40000, Growth = 2.4, MaxLevel = 20,
+                    BaseCost = 60000, Growth = 2.6, MaxLevel = 20,
                     RequiresId = UpgradeIds.BonusChance, RequiresLevel = 1,
                     Effect = l => "+" + NumberFormat.Percent(Balance.BonusAmount(l)) + " valor de bola"
                 },
                 new UpgradeDef
                 {
                     Id = UpgradeIds.Crit, Name = "Rebote crítico", Desc = "Rebote raro que duplica el valor de la bola", Category = UpgradeCategory.Rebotes,
-                    BaseCost = 600000, Growth = 3, MaxLevel = 5,
+                    BaseCost = 1500000, Growth = 3.2, MaxLevel = 4,
                     RequiresId = UpgradeIds.BonusChance, RequiresLevel = 5,
                     Effect = l => NumberFormat.Percent(Balance.CritChance(l)) + " de x2"
                 },
@@ -131,33 +131,33 @@ namespace Plinko
                 {
                     Id = UpgradeIds.Echo, Name = "Eco", Desc = "La bola rebota dos veces en el mismo pincho",
                     Category = UpgradeCategory.Rebotes,
-                    BaseCost = 60000, Growth = 2.4, MaxLevel = 6,
+                    BaseCost = 120000, Growth = 2.6, MaxLevel = 5,
                     Effect = l => NumberFormat.Percent(Balance.EchoChance(l)) + " de doble rebote"
                 },
                 new UpgradeDef
                 {
                     Id = UpgradeIds.Lightning, Name = "Relámpago", Desc = "Un rayo salta a pinchos cercanos y los activa",
                     Category = UpgradeCategory.Rebotes,
-                    BaseCost = 100000, Growth = 2.5, MaxLevel = 6,
+                    BaseCost = 1000000, Growth = 2.7, MaxLevel = 5,
                     Effect = l => NumberFormat.Percent(Balance.LightningChance(l)) + ", " + Balance.LightningHops(l) + " saltos"
                 },
                 new UpgradeDef
                 {
                     Id = UpgradeIds.Charge, Name = "Pincho cargado", Desc = "El pincho se electrifica y da x1.5 a las bolas que lo toquen",
                     Category = UpgradeCategory.Rebotes,
-                    BaseCost = 300000, Growth = 2.5, MaxLevel = 7,
+                    BaseCost = 8000000, Growth = 2.7, MaxLevel = 6,
                     Effect = l => NumberFormat.Percent(Balance.ChargeChance(l)) + ", máx. " + Balance.MaxChargedPegs(l) + " a la vez"
                 },
                 new UpgradeDef
                 {
                     Id = UpgradeIds.GoldenPegs, Name = "Pinchos dorados", Desc = "Pinchos que multiplican el valor de la bola al tocarlos", Category = UpgradeCategory.Pinchos,
-                    BaseCost = 200000, Growth = 3, MaxLevel = 15,
+                    BaseCost = 500000, Growth = 3.2, MaxLevel = 15,
                     Effect = l => (2 * l) + " pinchos (" + NumberFormat.Multiplier(Balance.GoldenPegMultiplier) + " valor)"
                 },
                 new UpgradeDef
                 {
                     Id = UpgradeIds.ClonePegs, Name = "Pinchos clonadores", Desc = "Pinchos que crean una copia de la bola", Category = UpgradeCategory.Pinchos,
-                    BaseCost = 3000000, Growth = 3.5, MaxLevel = 8,
+                    BaseCost = 10000000, Growth = 3.7, MaxLevel = 8,
                     RequiresId = UpgradeIds.GoldenPegs, RequiresLevel = 1,
                     Effect = l => l + " pinchos (duplican la bola)"
                 },
@@ -179,15 +179,15 @@ namespace Plinko
             for (int g = 0; g < 3; g++)
             {
                 int group = g;
-                double p = Balance.GroupProbability(Balance.BaseRows, group);
+                double[] groupCost = { 2e6, 15e6, 120e6 }; // lo más difícil del juego: centrales -> intermedios -> extremos
                 list.Add(new UpgradeDef
                 {
                     Id = UpgradeIds.BucketGroup(group),
                     Name = groupNames[group],
                     Desc = groupDescs[group],
                     Category = UpgradeCategory.Multiplicadores,
-                    BaseCost = 720 + 7200 * p, // donde más se cae, más cuesta
-                    Growth = 2.2, MaxLevel = 25,
+                    BaseCost = groupCost[group],
+                    Growth = 2.8, MaxLevel = 25,
                     Effect = l => "+" + NumberFormat.Multiplier(Balance.BucketBonus(group, l)).Substring(1)
                 });
             }
@@ -195,28 +195,28 @@ namespace Plinko
             {
                 Id = UpgradeIds.OverloadTime, Name = "Sobrecarga duradera", Desc = "La Sobrecarga dura más tiempo",
                 Category = UpgradeCategory.Sobrecarga,
-                BaseCost = 5000, Growth = 2.6, MaxLevel = 5,
+                BaseCost = 15000, Growth = 2.8, MaxLevel = 5,
                 Effect = l => Balance.OverloadDuration(l).ToString("0") + " s"
             });
             list.Add(new UpgradeDef
             {
                 Id = UpgradeIds.OverloadMult, Name = "Sobrecarga potente", Desc = "Multiplica más el dinero durante la Sobrecarga",
                 Category = UpgradeCategory.Sobrecarga,
-                BaseCost = 20000, Growth = 2.8, MaxLevel = 5,
+                BaseCost = 100000, Growth = 3.0, MaxLevel = 5,
                 Effect = l => "Todo " + NumberFormat.Multiplier(Balance.OverloadMultiplier(l))
             });
             list.Add(new UpgradeDef
             {
                 Id = UpgradeIds.OverloadFill, Name = "Carga rápida", Desc = "El medidor de Sobrecarga se llena antes",
                 Category = UpgradeCategory.Sobrecarga,
-                BaseCost = 30000, Growth = 2.6, MaxLevel = 5,
+                BaseCost = 600000, Growth = 2.8, MaxLevel = 5,
                 Effect = l => "Necesita " + (int)Math.Round(Balance.OverloadFillFactor(l) * 100) + "% de rebotes"
             });
             list.Add(new UpgradeDef
             {
                 Id = UpgradeIds.Drift, Name = "Desvío lateral", Desc = "Las bolas tienden a rebotar hacia los lados",
                 Category = UpgradeCategory.Multiplicadores,
-                BaseCost = 50000, Growth = 2.5, MaxLevel = 5,
+                BaseCost = 300e6, Growth = 3.0, MaxLevel = 5,
                 Effect = l => NumberFormat.Percent(Balance.DriftChance(l)) + " de rebotes hacia fuera"
             });
 

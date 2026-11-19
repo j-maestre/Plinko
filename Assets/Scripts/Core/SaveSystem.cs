@@ -27,6 +27,7 @@ namespace Plinko
         public double cores;      // lingotes de oro sin gastar (moneda de la tienda de prestigio)
         public int prestigeCount;
         public List<UpgradeEntry> prestigeUpgrades = new List<UpgradeEntry>();
+        public List<string> unlockedTabs = new List<string>(); // secciones compradas (permanentes)
         public List<UpgradeEntry> upgrades = new List<UpgradeEntry>();
         public long lastSaveUnix;
     }

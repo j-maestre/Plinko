@@ -77,6 +77,13 @@ namespace Plinko
             State = SaveSystem.Load();
             foreach (var e in State.upgrades) levels[e.id] = e.level;
             foreach (var e in State.prestigeUpgrades) prestigeLevels[e.id] = e.level;
+            // partidas anteriores a los candados: abrir las secciones donde ya hay mejoras compradas
+            foreach (var e in State.upgrades)
+            {
+                var def = UpgradeCatalog.Get(e.id);
+                if (def != null && e.level > 0 && !State.unlockedTabs.Contains(def.Category.ToString()))
+                    State.unlockedTabs.Add(def.Category.ToString());
+            }
 
             Stats = new Stats(this);
             Stats.Recalculate();
@@ -279,9 +286,36 @@ namespace Plinko
 
         public int GetLevel(string id) => levels.TryGetValue(id, out int l) ? l : 0;
 
+        public double CostOf(UpgradeDef def) => def.CostAt(GetLevel(def.Id));
+
         /// <summary>Requisito de desbloqueo cumplido (o ya tiene niveles comprados).</summary>
         public bool IsUnlocked(UpgradeDef def) =>
-            def.RequiresId == null || GetLevel(def.RequiresId) >= def.RequiresLevel || GetLevel(def.Id) > 0;
+            IsTabUnlocked(def.Category) &&
+            (def.RequiresId == null || GetLevel(def.RequiresId) >= def.RequiresLevel || GetLevel(def.Id) > 0);
+
+        // --- Secciones (pestañas) con candado ---
+        public event Action<UpgradeCategory> TabUnlocked;
+
+        public bool IsTabUnlocked(UpgradeCategory c) =>
+            Balance.TabUnlockCost(c) <= 0 || State.unlockedTabs.Contains(c.ToString());
+
+        /// <summary>Solo se puede comprar la siguiente sección a la última desbloqueada.</summary>
+        public bool IsTabNextToUnlock(UpgradeCategory c) => !IsTabUnlocked(c) && ((int)c == 0 || IsTabUnlocked((UpgradeCategory)((int)c - 1)));
+
+        public bool TryUnlockTab(UpgradeCategory c)
+        {
+            if (!IsTabNextToUnlock(c)) return false;
+            double cost = Balance.TabUnlockCost(c);
+            if (State.money < cost) return false;
+            State.money -= cost;
+            State.unlockedTabs.Add(c.ToString());
+            Audio.Record();
+            Save();
+            TabUnlocked?.Invoke(c);
+            MoneyChanged?.Invoke();
+            UpgradesChanged?.Invoke();
+            return true;
+        }
 
         /// <summary>Aplica al tablero actual (p. ej. cubos que solo existen con más filas).</summary>
         public bool AppliesToBoard(UpgradeDef def) => def.Visible == null || def.Visible(this);
@@ -292,7 +326,7 @@ namespace Plinko
         {
             int lvl = GetLevel(def.Id);
             if (lvl >= def.MaxLevel || !IsVisible(def)) return false;
-            double cost = def.CostAt(lvl);
+            double cost = CostOf(def);
             if (State.money < cost) return false;
 
             State.money -= cost;

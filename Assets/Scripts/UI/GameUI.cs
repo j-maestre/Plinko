@@ -34,6 +34,93 @@ namespace Plinko
             public Text Label;
             public Image Badge;
             public Punch Punch;
+            public GameObject Lock;
+        }
+
+        // Tarjeta que sustituye a la lista cuando la sección está bloqueada
+        GameObject unlockCard;
+        Text unlockTitle, unlockInfo, unlockCost;
+        Button unlockButton;
+        RectTransform unlockFill;
+        Punch unlockPunch;
+
+        /// <summary>Candado dibujado con dos piezas: arco (anillo) y cuerpo.</summary>
+        static RectTransform Padlock(Transform parent, float size, Color color)
+        {
+            var rt = UIFactory.Rect("Lock", parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            rt.sizeDelta = new Vector2(size, size);
+            var shackle = UIFactory.Rect("Shackle", rt, new Vector2(0.2f, 0.38f), new Vector2(0.8f, 0.98f));
+            var ring = shackle.gameObject.AddComponent<Image>();
+            ring.sprite = SpriteFactory.Ring;
+            ring.color = color;
+            ring.raycastTarget = false;
+            var body = UIFactory.Rect("Body", rt, new Vector2(0.08f, 0f), new Vector2(0.92f, 0.6f));
+            UIFactory.Image(body, color).raycastTarget = false;
+            var hole = UIFactory.Rect("Hole", body, new Vector2(0.43f, 0.3f), new Vector2(0.57f, 0.65f));
+            UIFactory.Image(hole, new Color(0, 0, 0, 0.45f), false).raycastTarget = false;
+            return rt;
+        }
+
+        void BuildUnlockCard()
+        {
+            var body = UIFactory.Card("UnlockSection", listContent, Vector2.zero, Vector2.one, UIFactory.CardDarkColor, 6);
+            var holder = (RectTransform)body.parent;
+            holder.gameObject.AddComponent<LayoutElement>().preferredHeight = 330;
+            unlockCard = holder.gameObject;
+            unlockPunch = Punch.On(holder, 0.05f, 0.3f);
+
+            var lockRt = Padlock(body, 96, UIFactory.TextDim);
+            lockRt.anchorMin = lockRt.anchorMax = new Vector2(0.5f, 1f);
+            lockRt.anchoredPosition = new Vector2(0, -70);
+
+            unlockTitle = UIFactory.Text(UIFactory.Rect("Title", body, new Vector2(0, 0.5f), new Vector2(1, 0.64f)), "", 34, UIFactory.TextMain, TextAnchor.MiddleCenter, true);
+            unlockInfo = UIFactory.Text(UIFactory.Inset(UIFactory.Rect("Info", body, new Vector2(0, 0.38f), new Vector2(1, 0.5f)), 30, 0, 30, 0), "", 23, UIFactory.TextDim, TextAnchor.MiddleCenter);
+            unlockInfo.horizontalOverflow = HorizontalWrapMode.Wrap;
+
+            var btnRt = UIFactory.Rect("Unlock", body, new Vector2(0.2f, 0.08f), new Vector2(0.8f, 0.32f));
+            unlockButton = UIFactory.Button(btnRt, UIFactory.Gold, out unlockCost, "", 32);
+            unlockFill = UIFactory.Rect("Fill", btnRt, Vector2.zero, new Vector2(0, 1));
+            unlockFill.SetSiblingIndex(0);
+            UIFactory.Image(unlockFill, new Color(UIFactory.Gold.r, UIFactory.Gold.g, UIFactory.Gold.b, 0.3f)).raycastTarget = false;
+            unlockButton.onClick.AddListener(() =>
+            {
+                if (gm.TryUnlockTab(currentTab))
+                {
+                    gm.Board.Shake(0.4f);
+                    gm.Background.Pulse(UIFactory.CategoryColor(currentTab), 0.8f);
+                    ShowBanner("¡Nueva sección!  <color=#" + ColorUtility.ToHtmlStringRGB(UIFactory.CategoryColor(currentTab)) + ">" + TabName(currentTab) + "</color>",
+                        UIFactory.CategoryColor(currentTab));
+                    var tab = tabs.Find(x => x.Cat == currentTab);
+                    if (tab != null) tab.Punch.Play(1.5f);
+                    SelectTab(currentTab);
+                }
+            });
+        }
+
+        void RefreshUnlockCard(bool show)
+        {
+            if (unlockCard.activeSelf != show) unlockCard.SetActive(show);
+            if (!show) return;
+            unlockCard.transform.SetAsLastSibling();
+            double cost = Balance.TabUnlockCost(currentTab);
+            bool next = gm.IsTabNextToUnlock(currentTab);
+            unlockTitle.text = "Sección " + TabName(currentTab) + " bloqueada";
+            if (next)
+            {
+                unlockInfo.text = "Desbloquéala para descubrir mejoras nuevas.";
+                unlockCost.text = "Desbloquear  " + NumberFormat.Money(cost);
+                unlockButton.interactable = gm.Money >= cost;
+                unlockFill.gameObject.SetActive(gm.Money < cost);
+                unlockFill.anchorMax = new Vector2(Mathf.Clamp01((float)(gm.Money / cost)), 1);
+            }
+            else
+            {
+                var prev = (UpgradeCategory)((int)currentTab - 1);
+                unlockInfo.text = "Primero desbloquea la sección " + TabName(prev) + ".";
+                unlockCost.text = NumberFormat.Money(cost);
+                unlockButton.interactable = false;
+                unlockFill.gameObject.SetActive(false);
+            }
         }
 
         class PopupItem
@@ -155,18 +242,24 @@ namespace Plinko
 
         void BuildPrestigeChip(Transform parent)
         {
-            var chip = UIFactory.Rect("Chip_Prestige", parent, new Vector2(0.025f, 0.16f), new Vector2(0.285f, 0.86f));
-            var img = UIFactory.Image(chip, UIFactory.CardDarkColor);
-            var btn = chip.gameObject.AddComponent<Button>();
-            btn.targetGraphic = img;
-            UIFactory.SetButtonColor(btn, UIFactory.CardDarkColor);
-            btn.onClick.AddListener(() => prestigeUI.Open());
-            UIFactory.Text(UIFactory.Inset(UIFactory.Rect("Label", chip, new Vector2(0, 0.52f), Vector2.one), 20, 0, 20, 6),
-                "PRESTIGIO", 22, UIFactory.TextDim, TextAnchor.MiddleLeft);
-            prestigeValue = UIFactory.Text(UIFactory.Inset(UIFactory.Rect("Value", chip, Vector2.zero, new Vector2(1, 0.56f)), 20, 6, 20, 0),
-                "", 32, PrestigeUI.CoreColor, TextAnchor.MiddleLeft, true);
-            UIFactory.AddShadow(prestigeValue, 2f, 0.4f);
-            prestigePunch = Punch.On(chip, 0.1f, 0.3f);
+            var holder = UIFactory.Rect("Chip_Prestige", parent, new Vector2(0.025f, 0.14f), new Vector2(0.285f, 0.88f));
+            // borde dorado + botón con volumen (brillo, sombra al pulsar) para que se lea como botón
+            UIFactory.Image(UIFactory.Inset(UIFactory.Stretch("Shadow", holder), 0, -5, 0, 5), UIFactory.ShadowColor).raycastTarget = false;
+            UIFactory.Image(UIFactory.Stretch("Border", holder), PrestigeUI.CoreColor).raycastTarget = false;
+            var btnRt = UIFactory.Inset(UIFactory.Stretch("Button", holder), 3, 3, 3, 3);
+            var btn = UIFactory.Button(btnRt, new Color(0.36f, 0.24f, 0.06f), out var unused, "", 10);
+            unused.gameObject.SetActive(false);
+            btn.onClick.AddListener(() => { prestigePunch.Play(); prestigeUI.Open(); });
+
+            PrestigeUI.Ingot(btnRt, new Vector2(38, 0), 0.75f);
+            UIFactory.Text(UIFactory.Inset(UIFactory.Rect("Label", btnRt, new Vector2(0, 0.52f), Vector2.one), 70, 0, 30, 6),
+                "PRESTIGIO", 22, new Color(1f, 0.88f, 0.6f), TextAnchor.MiddleLeft, true);
+            prestigeValue = UIFactory.Text(UIFactory.Inset(UIFactory.Rect("Value", btnRt, Vector2.zero, new Vector2(1, 0.56f)), 70, 6, 30, 0),
+                "", 30, UIFactory.TextMain, TextAnchor.MiddleLeft, true);
+            UIFactory.AddShadow(prestigeValue, 2f, 0.5f);
+            var arrow = UIFactory.Text(UIFactory.Inset(UIFactory.Stretch("Arrow", btnRt), 0, 0, 12, 0), "›", 48, PrestigeUI.CoreColor, TextAnchor.MiddleRight, true);
+            UIFactory.AddShadow(arrow, 2f, 0.5f);
+            prestigePunch = Punch.On(holder, 0.1f, 0.3f);
         }
 
         void RefreshPrestigeChip(float dt)
@@ -433,6 +526,11 @@ namespace Plinko
                 tab.Badge.sprite = SpriteFactory.Circle;
                 tab.Badge.color = UIFactory.Gold;
                 tab.Badge.raycastTarget = false;
+
+                var lk = Padlock(rt, 30, UIFactory.TextDim);
+                lk.anchorMin = lk.anchorMax = new Vector2(0, 0.5f);
+                lk.anchoredPosition = new Vector2(26, 0);
+                tab.Lock = lk.gameObject;
                 tabs.Add(tab);
             }
         }
@@ -464,6 +562,7 @@ namespace Plinko
             scroll.content = listContent;
 
             foreach (var def in UpgradeCatalog.All) rows.Add(BuildRow(def));
+            BuildUnlockCard();
             SelectTab(currentTab);
         }
 
@@ -657,7 +756,7 @@ namespace Plinko
                 bool unlocked = gm.IsVisible(def);
                 int lvl = gm.GetLevel(def.Id);
                 bool max = lvl >= def.MaxLevel;
-                double cost = def.CostAt(lvl);
+                double cost = gm.CostOf(def);
                 bool canBuy = unlocked && !max && gm.Money >= cost;
                 if (canBuy) affordable.Add(def.Category);
 
@@ -673,7 +772,7 @@ namespace Plinko
 
                 // Las bloqueadas se ven en gris y sin revelar qué son
                 bool locked = !unlocked;
-                bool visible = def.Category == currentTab && gm.AppliesToBoard(def);
+                bool visible = def.Category == currentTab && gm.AppliesToBoard(def) && gm.IsTabUnlocked(def.Category);
                 if (row.Go.activeSelf != visible) row.Go.SetActive(visible);
                 if (visible != row.Shown || locked != row.Locked) orderDirty = true;
                 row.Shown = visible;
@@ -699,8 +798,15 @@ namespace Plinko
             foreach (var t in tabs)
             {
                 if (t.Cat == currentTab) newUnlocks.Remove(t.Cat); // visto
-                t.Badge.enabled = (affordable.Contains(t.Cat) || newUnlocks.Contains(t.Cat)) && t.Cat != currentTab;
+                bool open = gm.IsTabUnlocked(t.Cat);
+                bool canOpen = gm.IsTabNextToUnlock(t.Cat) && gm.Money >= Balance.TabUnlockCost(t.Cat);
+                if (t.Lock.activeSelf == open) t.Lock.SetActive(!open);
+                var lrt = t.Label.rectTransform;
+                lrt.offsetMin = new Vector2(open ? 0 : 34, lrt.offsetMin.y);
+                if (!open && t.Cat != currentTab) t.Label.color = new Color(UIFactory.TextDim.r, UIFactory.TextDim.g, UIFactory.TextDim.b, 0.6f);
+                t.Badge.enabled = t.Cat != currentTab && (canOpen || (open && (affordable.Contains(t.Cat) || newUnlocks.Contains(t.Cat))));
             }
+            if (unlockCard != null) RefreshUnlockCard(!gm.IsTabUnlocked(currentTab));
         }
 
         // ---------------------------------------------------------------- Update
