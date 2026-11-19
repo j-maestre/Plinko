@@ -86,14 +86,13 @@ namespace Plinko
                 "TIENDA PERMANENTE", 28, UIFactory.TextDim, TextAnchor.MiddleLeft, true);
             BuildShop(UIFactory.Rect("Shop", card, new Vector2(0.03f, 0.07f), new Vector2(0.97f, 0.57f)));
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            var resetRt = UIFactory.Rect("DebugReset", card, new Vector2(0.06f, 0.012f), new Vector2(0.4f, 0.058f));
-            UIFactory.Button(resetRt, new Color(0.55f, 0.2f, 0.3f), out resetLabel, "BORRAR TODO (debug)", 22).onClick.AddListener(() =>
+            // Borrar la partida entera (también lingotes y tienda). Doble toque para confirmar.
+            var resetRt = UIFactory.Rect("Reset", card, new Vector2(0.06f, 0.012f), new Vector2(0.4f, 0.058f));
+            UIFactory.Button(resetRt, new Color(0.55f, 0.2f, 0.3f), out resetLabel, "BORRAR PARTIDA", 22).onClick.AddListener(() =>
             {
                 if (resetConfirm > 0) { resetConfirm = 0; gm.ResetProgress(); Close(); }
-                else { resetConfirm = 2f; resetLabel.text = "¿SEGURO?"; }
+                else { resetConfirm = 2.5f; resetLabel.text = "¿SEGURO? Toca otra vez"; }
             });
-#endif
 
             gm.UpgradesChanged += Refresh;
             panel.gameObject.SetActive(false);
@@ -209,7 +208,7 @@ namespace Plinko
             if (!IsOpen) return;
             float dt = Time.unscaledDeltaTime;
             if (confirmTimer > 0) confirmTimer -= dt;
-            if (resetConfirm > 0) { resetConfirm -= dt; if (resetConfirm <= 0 && resetLabel != null) resetLabel.text = "BORRAR TODO (debug)"; }
+            if (resetConfirm > 0) { resetConfirm -= dt; if (resetConfirm <= 0 && resetLabel != null) resetLabel.text = "BORRAR PARTIDA"; }
             refreshTimer -= dt;
             if (refreshTimer <= 0) { refreshTimer = 0.2f; Refresh(); }
         }

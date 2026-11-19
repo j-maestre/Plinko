@@ -219,9 +219,14 @@ namespace Plinko
 
         void BuildTopBar()
         {
+            // Relleno detrás de la barra de estado / notch (no estira la tarjeta: su contenido se quedaría fuera de pantalla)
+            var fill = UIFactory.Rect("StatusFill", root, new Vector2(0, BoardView.TopEdge - BoardView.TopUI * 0.5f), Vector2.one);
+            UIFactory.Inset(fill, 14, 0, 14, -60);
+            UIFactory.Image(fill, UIFactory.Panel, false).raycastTarget = false;
+
             var bar = UIFactory.Rect("TopBar", root, new Vector2(0, BoardView.TopEdge - BoardView.TopUI), new Vector2(1, BoardView.TopEdge));
             var body = UIFactory.Card("TopCard", bar, Vector2.zero, Vector2.one, UIFactory.Panel, 6);
-            UIFactory.Inset((RectTransform)body.parent, 14, 6, 14, -400); // cubre también la zona de la barra de estado
+            UIFactory.Inset((RectTransform)body.parent, 14, 6, 14, 0);
 
             // Dinero centrado y, debajo en pequeño, el dinero por segundo
             var moneyArea = UIFactory.Rect("MoneyArea", body, new Vector2(0.25f, 0.36f), new Vector2(0.75f, 0.97f));
