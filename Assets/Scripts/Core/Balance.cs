@@ -43,7 +43,7 @@ namespace Plinko
 
         // --- Lanzamiento ---
         public const int BaseMaxBalls = 3;
-        public const float ManualCooldown = 0.35f;
+        public const float ManualCooldown = 0.08f;   // solo evita dobles toques: cada toque lanza una bola si hay hueco
         public static int MaxBalls(int lvl) => BaseMaxBalls + lvl;          // pocas bolas: que merezca la pena mirarlas
         public static float AutoInterval(int lvl) => lvl <= 0 ? 0f : Mathf.Max(0.35f, 2.0f * Mathf.Pow(0.88f, lvl - 1));
 
