@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace Plinko
 {
@@ -22,14 +23,13 @@ namespace Plinko
         /// <summary>Condición extra de visibilidad (opcional).</summary>
         public Func<GameManager, bool> Visible;
 
-        public double CostAt(int level) => BaseCost * Math.Pow(Growth, level);
+        public double CostAt(int level) => BaseCost * Math.Pow(Growth, level) * Balance.LateLevelFactor(level);
     }
 
     public static class UpgradeIds
     {
         public const string AutoLauncher = "auto";
         public const string Capacity = "capacity";
-        public const string BallTier = "tier";
         public const string GoldenBall = "golden_ball";
         public const string PegFlat = "peg_flat";
         public const string PegPercent = "peg_pct";
@@ -72,20 +72,14 @@ namespace Plinko
                 new UpgradeDef
                 {
                     Id = UpgradeIds.AutoLauncher, Name = "Auto-lanzador", Desc = "Lanza bolas solo, sin tocar nada", Category = UpgradeCategory.Bolas,
-                    BaseCost = 50, Growth = 2.4, MaxLevel = 14,
+                    BaseCost = 50, Growth = 2.4, MaxLevel = 15,
                     Effect = l => l == 0 ? "Apagado" : (1f / Balance.AutoInterval(l)).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " bolas/s"
                 },
                 new UpgradeDef
                 {
                     Id = UpgradeIds.Capacity, Name = "Capacidad", Desc = "Más bolas cayendo a la vez", Category = UpgradeCategory.Bolas,
-                    BaseCost = 1500, Growth = 2.4, MaxLevel = 30,
+                    BaseCost = 5000, Growth = 3.0, MaxLevel = 12,
                     Effect = l => Balance.MaxBalls(l) + " bolas en pantalla"
-                },
-                new UpgradeDef
-                {
-                    Id = UpgradeIds.BallTier, Name = "Calidad de bola", Desc = "Bolas de más valor y más dinero por rebote", Category = UpgradeCategory.Bolas,
-                    BaseCost = 20000, Growth = 45, MaxLevel = Balance.Tiers.Length - 1,
-                    Effect = l => Balance.Tiers[l].Name + " (valor " + NumberFormat.Format(Balance.Tiers[l].Value) + ")"
                 },
                 new UpgradeDef
                 {
@@ -234,8 +228,7 @@ namespace Plinko
             {
                 // Bolas
                 { UpgradeIds.Capacity,    (UpgradeIds.AutoLauncher, 2) },
-                { UpgradeIds.BallTier,    (UpgradeIds.Capacity, 3) },
-                { UpgradeIds.GoldenBall,  (UpgradeIds.BallTier, 1) },
+                { UpgradeIds.GoldenBall,  (UpgradeIds.Capacity, 4) },
                 // Pinchos
                 { UpgradeIds.Rows,        (UpgradeIds.PegFlat, 4) },
                 { UpgradeIds.GoldenPegs,  (UpgradeIds.PegFlat, 5) },

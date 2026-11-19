@@ -27,11 +27,12 @@ namespace Plinko
         public void Recalculate()
         {
             Rows = Balance.Rows(gm.GetLevel(UpgradeIds.Rows));
-            MaxBalls = Balance.MaxBalls(gm.GetLevel(UpgradeIds.Capacity));
-            TierIndex = Math.Min(gm.GetLevel(UpgradeIds.BallTier), Balance.Tiers.Length - 1);
+            int tier = Math.Min(gm.GetPrestigeLevel(PrestigeIds.BallTier), Balance.Tiers.Length - 1); // premio de prestigio
+            MaxBalls = Math.Max(1, (int)Math.Round(Balance.MaxBalls(gm.GetLevel(UpgradeIds.Capacity)) * Balance.TierCapacityFactor(tier)));
+            TierIndex = tier;
             GoldenPegs = 2 * gm.GetLevel(UpgradeIds.GoldenPegs);
             ClonePegs = gm.GetLevel(UpgradeIds.ClonePegs);
-            AutoInterval = Balance.AutoInterval(gm.GetLevel(UpgradeIds.AutoLauncher));
+            AutoInterval = Balance.AutoInterval(gm.GetLevel(UpgradeIds.AutoLauncher)) * Balance.TierLaunchFactor(tier);
             PegFlat = Balance.PegFlat(gm.GetLevel(UpgradeIds.PegFlat));
             PegPercent = Balance.PegPercent(gm.GetLevel(UpgradeIds.PegPercent));
             BonusChance = Balance.BonusChance(gm.GetLevel(UpgradeIds.BonusChance));

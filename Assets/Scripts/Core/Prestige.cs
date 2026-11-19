@@ -20,6 +20,7 @@ namespace Plinko
     public static class PrestigeIds
     {
         public const string Multiplier = "p_mult";
+        public const string BallTier = "p_tier";
         public const string RushDuration = "p_rush_time";
         public const string RushFrequency = "p_rush_freq";
         public const string StartMoney = "p_start_money";
@@ -43,7 +44,7 @@ namespace Plinko
         public const double UnspentCoreBonus = 0.01;           // cada lingote sin gastar: +1% de dinero
 
         /// <summary>Precio en dinero de hacer prestigio: obliga a llegar lejos y sube con cada prestigio.</summary>
-        public static double PrestigeCost(int prestigeCount) => 100e6 * Math.Pow(6, prestigeCount);
+        public static double PrestigeCost(int prestigeCount) => 10e6 * Math.Pow(6, prestigeCount); // la 1ª partida solo tiene Bolas y Pinchos
 
         /// <summary>
         /// Lingotes fijos por prestigio (no dependen de cuánto pases del precio): incentiva reiniciar en cuanto se pueda.
@@ -63,6 +64,13 @@ namespace Plinko
     {
         public static readonly List<PrestigeDef> All = new List<PrestigeDef>
         {
+            new PrestigeDef
+            {
+                Id = PrestigeIds.BallTier, Name = "Calidad de bola", Desc = "Bolas mucho más valiosas, pero caben menos y salen más despacio",
+                BaseCost = 3, Growth = 2.5, MaxLevel = Balance.Tiers.Length - 1,
+                Effect = l => Balance.Tiers[l].Name + " (valor " + NumberFormat.Format(Balance.Tiers[l].Value) + ", " +
+                              (int)Math.Round(Balance.TierCapacityFactor(l) * 100) + "% bolas)"
+            },
             new PrestigeDef
             {
                 Id = PrestigeIds.Multiplier, Name = "Riqueza", Desc = "Más dinero de todas las fuentes",

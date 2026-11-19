@@ -107,17 +107,20 @@ namespace Plinko
             unlockTitle.text = "Sección " + TabName(currentTab) + " bloqueada";
             if (next)
             {
-                unlockInfo.text = "Desbloquéala para descubrir mejoras nuevas.";
-                unlockCost.text = "Desbloquear  " + NumberFormat.Money(cost);
-                unlockButton.interactable = gm.Money >= cost;
-                unlockFill.gameObject.SetActive(gm.Money < cost);
-                unlockFill.anchorMax = new Vector2(Mathf.Clamp01((float)(gm.Money / cost)), 1);
+                double cores = gm.State.cores;
+                unlockInfo.text = cores >= cost
+                    ? "Desbloquéala con lingotes de oro para descubrir mejoras nuevas."
+                    : "Se desbloquea con lingotes de oro. Consíguelos haciendo prestigio (tienes " + NumberFormat.Format(cores) + ").";
+                unlockCost.text = "Desbloquear  " + NumberFormat.Format(cost) + " lingotes";
+                unlockButton.interactable = cores >= cost;
+                unlockFill.gameObject.SetActive(cores < cost && cores > 0);
+                unlockFill.anchorMax = new Vector2(Mathf.Clamp01((float)(cores / cost)), 1);
             }
             else
             {
                 var prev = (UpgradeCategory)((int)currentTab - 1);
                 unlockInfo.text = "Primero desbloquea la sección " + TabName(prev) + ".";
-                unlockCost.text = NumberFormat.Money(cost);
+                unlockCost.text = NumberFormat.Format(cost) + " lingotes";
                 unlockButton.interactable = false;
                 unlockFill.gameObject.SetActive(false);
             }
@@ -132,7 +135,7 @@ namespace Plinko
         }
 
         const float PopupDuration = 0.9f;
-        const int MaxPopups = 40;
+        const int MaxPopups = 80;   // solo un tope de seguridad (p. ej. en la Avalancha)
 
         GameManager gm;
         Camera cam;
@@ -799,7 +802,7 @@ namespace Plinko
             {
                 if (t.Cat == currentTab) newUnlocks.Remove(t.Cat); // visto
                 bool open = gm.IsTabUnlocked(t.Cat);
-                bool canOpen = gm.IsTabNextToUnlock(t.Cat) && gm.Money >= Balance.TabUnlockCost(t.Cat);
+                bool canOpen = gm.IsTabNextToUnlock(t.Cat) && gm.State.cores >= Balance.TabUnlockCost(t.Cat);
                 if (t.Lock.activeSelf == open) t.Lock.SetActive(!open);
                 var lrt = t.Label.rectTransform;
                 lrt.offsetMin = new Vector2(open ? 0 : 34, lrt.offsetMin.y);
@@ -940,7 +943,6 @@ namespace Plinko
         public void Popup(Vector3 world, string text, Color color, float scale = 1f, bool lowPriority = false)
         {
             if (popups.Count >= MaxPopups) return;
-            if (lowPriority && popups.Count >= MaxPopups / 2) return;
             PopupItem p;
             if (popupPool.Count > 0) { p = popupPool.Pop(); p.Rt.gameObject.SetActive(true); }
             else

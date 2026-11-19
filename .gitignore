@@ -42,3 +42,7 @@ Thumbs.db
 
 # Temporales del build de Android
 /.utmp/
+
+# Escenas de recuperación que crea Unity tras un cierre inesperado
+/[Aa]ssets/_Recovery/
+/[Aa]ssets/_Recovery.meta

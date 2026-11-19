@@ -62,7 +62,7 @@ namespace Plinko
             coresPunch = Punch.On(coresRt, 0.08f, 0.3f);
 
             UIFactory.Text(UIFactory.Rect("Info", card, new Vector2(0.06f, 0.775f), new Vector2(0.94f, 0.84f)),
-                "Paga para reiniciar tu partida y llévate lingotes de oro (cada prestigio da más). Las mejoras de la tienda son permanentes y cada lingote sin gastar da +1% de dinero.",
+                "Paga para reiniciar tu partida y llévate lingotes de oro. Con ellos desbloqueas secciones nuevas (Rebotes, Sobrecarga, Multiplicadores) y mejoras permanentes. Cada lingote sin gastar da +1% de dinero.",
                 24, UIFactory.TextDim, TextAnchor.MiddleLeft).horizontalOverflow = HorizontalWrapMode.Wrap;
 
             // Bloque de reinicio

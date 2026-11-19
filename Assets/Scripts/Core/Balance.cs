@@ -23,12 +23,15 @@ namespace Plinko
     public static class Balance
     {
         // --- Secciones de mejoras (pestañas) ---
-        /// <summary>Precio para desbloquear cada pestaña. Se desbloquean en orden y no se pierden con el prestigio.</summary>
+        /// <summary>
+        /// Lingotes de oro (del prestigio) para desbloquear cada pestaña. Se desbloquean en orden y son permanentes:
+        /// la primera partida se juega solo con Bolas y Pinchos.
+        /// </summary>
         public static double TabUnlockCost(UpgradeCategory c) => c switch
         {
-            UpgradeCategory.Rebotes => 75e3,
-            UpgradeCategory.Sobrecarga => 1e6,
-            UpgradeCategory.Multiplicadores => 25e6,
+            UpgradeCategory.Rebotes => 5,
+            UpgradeCategory.Sobrecarga => 7,
+            UpgradeCategory.Multiplicadores => 10,
             _ => 0,                                    // Bolas y Pinchos, desde el principio
         };
 
@@ -41,8 +44,18 @@ namespace Plinko
         // --- Lanzamiento ---
         public const int BaseMaxBalls = 3;
         public const float ManualCooldown = 0.35f;
-        public static int MaxBalls(int lvl) => BaseMaxBalls + 4 * lvl;
-        public static float AutoInterval(int lvl) => lvl <= 0 ? 0f : Mathf.Max(0.05f, 1.5f * Mathf.Pow(0.75f, lvl - 1));
+        public static int MaxBalls(int lvl) => BaseMaxBalls + lvl;          // pocas bolas: que merezca la pena mirarlas
+        public static float AutoInterval(int lvl) => lvl <= 0 ? 0f : Mathf.Max(0.35f, 2.0f * Mathf.Pow(0.88f, lvl - 1));
+
+        // Mejor calidad de bola = bolas más valiosas pero menos a la vez y lanzadas más despacio
+        public static float TierCapacityFactor(int tier) => Mathf.Pow(0.8f, tier);
+        public static float TierLaunchFactor(int tier) => 1f + 0.25f * tier;
+
+        /// <summary>
+        /// Encarecimiento extra de cada mejora a partir del nivel 5: los primeros niveles van rápidos
+        /// y los altos frenan, para que el final no sea un no parar de comprar.
+        /// </summary>
+        public static double LateLevelFactor(int level) => Math.Pow(1.35, Math.Max(0, level - 4));
 
         // --- Pinchos ---
         public static double PegFlat(int lvl) => 5 * lvl;                       // +1 por rebote y nivel
@@ -76,7 +89,7 @@ namespace Plinko
         public const float RushMinDelay = 120f, RushMaxDelay = 240f;  // cada 2-4 minutos
         public const float RushDuration = 5f;            // corta a propósito: el prestigio permitirá alargarla
         public const float RushBoost = 5f;            // capacidad x5 y auto-lanzador x5
-        public const int RushMaxBalls = 300;          // tope para no saturar el móvil
+        public const int RushMaxBalls = 80;           // tope: incluso en avalancha, que se puedan seguir
         public const float RushMinInterval = 0.5f;    // sin auto-lanzador, la avalancha lanza igualmente
 
         // --- Bola dorada (aparece al lanzar con cierta probabilidad) ---

@@ -75,7 +75,13 @@ namespace Plinko
             Screen.autorotateToLandscapeRight = false;
 
             State = SaveSystem.Load();
-            foreach (var e in State.upgrades) levels[e.id] = e.level;
+            foreach (var e in State.upgrades)
+            {
+                // si el balance bajó el máximo de una mejora, las partidas viejas se ajustan a él
+                var def = UpgradeCatalog.Get(e.id);
+                if (def != null && e.level > def.MaxLevel) e.level = def.MaxLevel;
+                levels[e.id] = e.level;
+            }
             foreach (var e in State.prestigeUpgrades) prestigeLevels[e.id] = e.level;
             // partidas anteriores a los candados: abrir las secciones donde ya hay mejoras compradas
             foreach (var e in State.upgrades)
@@ -306,9 +312,10 @@ namespace Plinko
         {
             if (!IsTabNextToUnlock(c)) return false;
             double cost = Balance.TabUnlockCost(c);
-            if (State.money < cost) return false;
-            State.money -= cost;
+            if (State.cores < cost) return false;   // se paga con lingotes de oro
+            State.cores -= cost;
             State.unlockedTabs.Add(c.ToString());
+            Stats.Recalculate();                     // los lingotes sin gastar dan bonus
             Audio.Record();
             Save();
             TabUnlocked?.Invoke(c);
