@@ -33,6 +33,8 @@ namespace Plinko
             public float HaloAlpha;     // brillo de base según el tipo de bola
             public bool Echoing;        // está haciendo el rebote extra del eco
             public float SparkTimer;
+            public OwnedBall Owner;     // bola del jugador (null = clon o copia temporal)
+            public float SizeMul = 1f;  // las de más nivel son algo más grandes
         }
 
         const float DropDuration = 0.35f;
@@ -58,8 +60,10 @@ namespace Plinko
         readonly List<Ball> active = new List<Ball>();
         readonly Stack<Ball> pool = new Stack<Ball>();
 
-        /// <summary>Bolas lanzadas (sin contar clones), para el límite de capacidad.</summary>
+        /// <summary>Bolas del jugador que están cayendo ahora mismo.</summary>
         public int MainCount { get; private set; }
+        /// <summary>Todas las bolas en el tablero (incluye clones y copias temporales).</summary>
+        public int ActiveCount => active.Count;
 
         public void Init(GameManager gm, BoardView board)
         {
@@ -69,14 +73,26 @@ namespace Plinko
             root.SetParent(transform, false);
         }
 
-        public void Launch()
+        /// <summary>Lanza una bola del jugador desde arriba.</summary>
+        public void Launch(OwnedBall owner, bool fanfare = false)
         {
-            var tier = gm.Stats.Tier;
+            owner.InFlight = true;
+            LaunchLevel(owner, owner.Level, fanfare);
+        }
+
+        /// <summary>Copia temporal (Avalancha, Sobrecarga): cae una vez y desaparece.</summary>
+        public void LaunchTemp(int level) => LaunchLevel(null, level, false);
+
+        void LaunchLevel(OwnedBall owner, int level, bool fanfare)
+        {
             var b = Get();
+            b.Owner = owner;
             b.IsClone = false;
-            b.Value = tier.Value;
-            b.BaseColor = tier.Color;
-            b.Sr.color = tier.Color;
+            b.Value = Balance.BallValue(gm.Stats.TierIndex, level);
+            b.SizeMul = Mathf.Min(1.6f, 1f + 0.07f * (level - 1));
+            var color = Balance.LevelColor(level);
+            b.BaseColor = color;
+            b.Sr.color = color;
             b.Path = PathGenerator.WithDrift(board.Rows, (float)gm.Stats.DriftChance);
             b.HaloAlpha = TierHalo(gm.Stats.TierIndex);
             SetGolden(b, gm.Stats.GoldenBallChance > 0 && Random.value < gm.Stats.GoldenBallChance);
@@ -95,9 +111,10 @@ namespace Plinko
             b.Spawn = 0;
             ResetTrail(b);
             active.Add(b);
-            MainCount++;
+            if (owner != null) MainCount++;
 
-            gm.Fx.Ring(b.From, Alpha(b.BaseColor, 0.6f), 0.7f, 0.25f);
+            gm.Fx.Ring(b.From, Alpha(b.BaseColor, 0.6f), fanfare ? 1.8f : 0.7f, fanfare ? 0.45f : 0.25f);
+            if (fanfare) gm.Fx.Burst(b.From, b.BaseColor, 18, 5f, 0.08f, 0.6f);
             gm.Audio.Launch();
             if (b.IsGolden)
             {
@@ -106,6 +123,26 @@ namespace Plinko
                 gm.Audio.Special(1.5f);
                 gm.Background.Pulse(GoldenBallColor, 0.5f);
             }
+        }
+
+        /// <summary>Ráfaga de bolas a la vez (inicio de la avalancha).</summary>
+        public void LaunchVolley(int count)
+        {
+            for (int i = 0; i < count; i++) LaunchTemp(gm.Inventory.RandomLevel());
+        }
+
+        /// <summary>Quita del tablero la bola de ese dueño si está cayendo (al fusionar).</summary>
+        public void RemoveFlying(OwnedBall owner)
+        {
+            for (int i = active.Count - 1; i >= 0; i--)
+            {
+                if (active[i].Owner != owner) continue;
+                Vector2 pos = active[i].Tr.position;
+                gm.Fx.Burst(pos, active[i].BaseColor, 8, 3f, 0.06f, 0.35f);
+                Recycle(i, false);
+                return;
+            }
+            owner.InFlight = false;
         }
 
         public void ClearAll()
@@ -177,7 +214,7 @@ namespace Plinko
             b.Impact = Mathf.Max(0, b.Impact - dt * 9f);
             b.Spawn = Mathf.Min(1f, b.Spawn + dt * 8f);
 
-            float size = BoardView.BallRadius * 2f * (1f + 0.35f * b.Pulse) * EaseOutBack(b.Spawn);
+            float size = BoardView.BallRadius * 2f * b.SizeMul * (1f + 0.35f * b.Pulse) * EaseOutBack(b.Spawn);
             if (b.Impact > 0)
             {
                 b.Tr.localRotation = Quaternion.identity;
@@ -266,7 +303,7 @@ namespace Plinko
             gm.Audio.Peg(r, board.Rows, active.Count);
 
             // Ingreso por rebote: fijo (escalado por tier) + % del valor actual de la bola
-            double income = s.PegFlat * s.Tier.PegBonus + b.Value * s.PegPercent;
+            double income = b.Value * s.PegPercent;
             if (income > 0) gm.Earn(income);
 
             var type = board.GetPegType(r, k);
@@ -339,7 +376,7 @@ namespace Plinko
 
             boltPoints.Clear();
             boltPoints.Add(board.PegWorldPos(r, k));
-            double perHop = s.PegFlat * s.Tier.PegBonus + b.Value * (s.PegPercent + Balance.LightningHopValue);
+            double perHop = b.Value * (s.PegPercent + Balance.LightningHopValue);
             foreach (var c in chain)
             {
                 Vector2 p = board.PegWorldPos(c.x, c.y);
@@ -358,6 +395,8 @@ namespace Plinko
         {
             var c = Get();
             c.IsClone = true;
+            c.Owner = null;
+            c.SizeMul = parent.SizeMul;
             c.Value = parent.Value;
             c.BaseColor = Color.Lerp(parent.BaseColor, Color.white, 0.4f);
             c.Sr.color = c.BaseColor;
@@ -383,6 +422,7 @@ namespace Plinko
             double amount = b.Value * mult;
             gm.Earn(amount);
             board.PopBucket(b.Col);
+            if (gm.RushPending) gm.TriggerRushAt(b.Col);
             double shown = amount * gm.TotalMultiplier;
             bool record = gm.RegisterDrop(shown);
 
@@ -484,10 +524,17 @@ namespace Plinko
             b.Trail.Clear();
         }
 
-        void Recycle(int index)
+        void Recycle(int index, bool requeue = true)
         {
             var b = active[index];
-            if (!b.IsClone) MainCount--;
+            if (b.Owner != null)
+            {
+                MainCount--;
+                var owner = b.Owner;
+                b.Owner = null;
+                owner.InFlight = false;
+                if (requeue) gm.Inventory.ReturnToQueue(owner); // vuelve a la cola de goteo
+            }
             int last = active.Count - 1;
             active[index] = active[last];
             active.RemoveAt(last);

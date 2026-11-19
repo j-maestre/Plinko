@@ -44,8 +44,29 @@ namespace Plinko
         // --- Lanzamiento ---
         public const int BaseMaxBalls = 3;
         public const float ManualCooldown = 0.08f;   // solo evita dobles toques: cada toque lanza una bola si hay hueco
-        public static int MaxBalls(int lvl) => BaseMaxBalls + lvl;          // pocas bolas: que merezca la pena mirarlas
-        public static float AutoInterval(int lvl) => lvl <= 0 ? 0f : Mathf.Max(0.35f, 2.0f * Mathf.Pow(0.88f, lvl - 1));
+        public static int MaxBalls(int lvl) => BaseMaxBalls + lvl;          // huecos: cuántas bolas puedes tener          // pocas bolas: que merezca la pena mirarlas
+        /// <summary>Goteo: segundos entre bola y bola. Rápido desde el principio; la mejora lo acelera más.</summary>
+        public static float AutoInterval(int lvl) => Mathf.Max(0.12f, 0.6f * Mathf.Pow(0.85f, lvl));
+
+        // --- Bolas con nivel (fusión) ---
+        public const double MergeMultiplier = 2.3;   // dos bolas iguales -> una que vale un poco más que las dos juntas
+        public static double BallValue(int tier, int level) => Tiers[tier].Value * Math.Pow(MergeMultiplier, level - 1);
+        public static double BallCost(int bought) => 20 * Math.Pow(1.25, bought);
+
+        static readonly Color[] LevelColors =
+        {
+            new Color(0.85f, 0.90f, 1.00f), // 1
+            new Color(0.45f, 0.95f, 0.55f), // 2
+            new Color(0.35f, 0.85f, 1.00f), // 3
+            new Color(0.40f, 0.55f, 1.00f), // 4
+            new Color(0.70f, 0.45f, 1.00f), // 5
+            new Color(1.00f, 0.45f, 0.80f), // 6
+            new Color(1.00f, 0.35f, 0.35f), // 7
+            new Color(1.00f, 0.60f, 0.25f), // 8
+            new Color(1.00f, 0.90f, 0.30f), // 9
+            new Color(1.00f, 1.00f, 1.00f), // 10
+        };
+        public static Color LevelColor(int level) => LevelColors[(Math.Max(1, level) - 1) % LevelColors.Length];
 
         // Mejor calidad de bola = bolas más valiosas pero menos a la vez y lanzadas más despacio
         public static float TierCapacityFactor(int tier) => Mathf.Pow(0.8f, tier);
@@ -58,7 +79,8 @@ namespace Plinko
         public static double LateLevelFactor(int level) => Math.Pow(1.35, Math.Max(0, level - 4));
 
         // --- Pinchos ---
-        public static double PegFlat(int lvl) => 5 * lvl;                       // +1 por rebote y nivel
+        public const double BasePegPercent = 0.02;                          // cada rebote da un 2% del valor de la bola de base
+        public static double PegPercentBonus(int lvl) => 0.02 * lvl;        // +2% por nivel de Pinchos reforzados
         public static double PegPercent(int lvl) => 0.04 * lvl;            // +0.5% del valor de la bola por rebote
         public static double BonusChance(int lvl) => Math.Min(0.54, 0.06 * lvl);
         public static double BonusAmount(int lvl) => 0.06 + 0.06 * lvl;     // multiplicativo sobre el valor de la bola

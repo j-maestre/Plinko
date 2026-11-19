@@ -147,11 +147,13 @@ namespace Plinko
         double shownMoney, lastBest;
         float moneyPunchCooldown;
 
-        Button launchButton;
-        Punch launchPunch;
-        RectTransform capacityFill;
-        Text capacityText, tierText, autoText, evText;
-        Image tierDot;
+        // Fila de bolas + comprar + fusionar (sustituye al botón LANZAR)
+        const int MaxTokens = 15;
+        readonly List<(Image circle, Text label)> tokens = new List<(Image, Text)>();
+        Button buyButton, mergeButton;
+        Text buyLabel, mergeLabel;
+        Punch buyPunch, mergePunch;
+        readonly List<int> sortedLevels = new List<int>();
 
         UpgradeCategory currentTab = UpgradeCategory.Bolas;
         readonly List<Tab> tabs = new List<Tab>();
@@ -466,46 +468,77 @@ namespace Plinko
 
         void BuildLaunchRow(RectTransform row)
         {
-            var btnRt = UIFactory.Rect("LaunchButton", row, new Vector2(0.03f, 0.06f), new Vector2(0.56f, 0.96f));
-            launchButton = UIFactory.Button(btnRt, UIFactory.Accent, out var label, "LANZAR", 48);
-            label.rectTransform.anchorMin = new Vector2(0, 0.36f);
-            launchPunch = Punch.On(btnRt, 0.08f, 0.22f);
-            var hold = btnRt.gameObject.AddComponent<HoldButton>();
-            hold.OnHold = () =>
+            // Tus bolas: cada círculo es una bola con su nivel (color y número). Los vacíos son huecos libres.
+            var dock = UIFactory.Rect("Dock", row, new Vector2(0.03f, 0.06f), new Vector2(0.60f, 0.96f));
+            UIFactory.Image(dock, UIFactory.CardDarkColor);
+            const int perRow = 8;
+            for (int i = 0; i < MaxTokens; i++)
             {
-                if (!gm.ManualReady) return;
-                gm.ManualLaunch();
-                launchPunch.Play();
-            };
+                int r = i / perRow, c = i % perRow;
+                float cx = (c + 0.5f) / perRow;
+                float cy = r == 0 ? 0.72f : 0.28f;
+                var rt = UIFactory.Rect("Ball" + i, dock, new Vector2(cx, cy), new Vector2(cx, cy));
+                rt.sizeDelta = new Vector2(56, 56);
+                var img = rt.gameObject.AddComponent<Image>();
+                img.sprite = SpriteFactory.Sphere;
+                img.raycastTarget = false;
+                var label = UIFactory.Text(UIFactory.Stretch("Lv", rt), "", 26, new Color(0.05f, 0.06f, 0.12f), TextAnchor.MiddleCenter, true);
+                tokens.Add((img, label));
+            }
 
-            // Barra de capacidad dentro del botón
-            var barBg = UIFactory.Rect("CapacityBar", btnRt, new Vector2(0.08f, 0.14f), new Vector2(0.92f, 0.34f));
-            UIFactory.Image(barBg, new Color(0, 0, 0, 0.3f)).raycastTarget = false;
-            capacityFill = UIFactory.Rect("Fill", barBg, Vector2.zero, new Vector2(0, 1));
-            UIFactory.Image(capacityFill, new Color(1, 1, 1, 0.85f)).raycastTarget = false;
-            capacityText = UIFactory.Text(UIFactory.Stretch("Count", barBg), "", 22, new Color(0.05f, 0.1f, 0.2f), TextAnchor.MiddleCenter, true);
+            var buyRt = UIFactory.Rect("Buy", row, new Vector2(0.62f, 0.53f), new Vector2(0.97f, 0.96f));
+            buyButton = UIFactory.Button(buyRt, UIFactory.Accent, out buyLabel, "", 30);
+            buyPunch = Punch.On(buyRt, 0.1f, 0.25f);
+            buyButton.onClick.AddListener(() => { if (gm.TryBuyBall()) buyPunch.Play(); });
 
-            // Información a la derecha
-            var info = UIFactory.Rect("Info", row, new Vector2(0.59f, 0.06f), new Vector2(0.97f, 0.96f));
-            UIFactory.Image(info, UIFactory.CardDarkColor);
-            tierText = InfoLine(info, 0, out tierDot);
-            autoText = InfoLine(info, 1, out var autoDot);
-            autoDot.color = UIFactory.CategoryColor(UpgradeCategory.Bolas);
-            evText = InfoLine(info, 2, out var evDot);
-            evDot.color = UIFactory.CategoryColor(UpgradeCategory.Multiplicadores);
+            var mergeRt = UIFactory.Rect("Merge", row, new Vector2(0.62f, 0.06f), new Vector2(0.97f, 0.49f));
+            mergeButton = UIFactory.Button(mergeRt, new Color(0.72f, 0.45f, 1f), out mergeLabel, "", 30);
+            mergePunch = Punch.On(mergeRt, 0.12f, 0.3f);
+            mergeButton.onClick.AddListener(() => { if (gm.TryMerge()) { mergePunch.Play(); RefreshDock(); } });
+
+            gm.BallsChanged += RefreshDock;
         }
 
-        Text InfoLine(RectTransform parent, int index, out Image dot)
+        /// <summary>Pinta las bolas ordenadas de mayor a menor nivel y actualiza los botones.</summary>
+        void RefreshDock()
         {
-            float y1 = 1f - index / 3f, y0 = y1 - 1f / 3f;
-            var line = UIFactory.Inset(UIFactory.Rect("Line" + index, parent, new Vector2(0, y0), new Vector2(1, y1)), 22, 0, 16, 0);
-            var d = UIFactory.Rect("Dot", line, new Vector2(0, 0.5f), new Vector2(0, 0.5f));
-            d.sizeDelta = new Vector2(18, 18);
-            d.anchoredPosition = new Vector2(9, 0);
-            dot = d.gameObject.AddComponent<Image>();
-            dot.sprite = SpriteFactory.Circle;
-            dot.raycastTarget = false;
-            return UIFactory.Text(UIFactory.Inset(UIFactory.Stretch("Text", line), 34, 0, 0, 0), "", 27, UIFactory.TextMain, TextAnchor.MiddleLeft);
+            var inv = gm.Inventory;
+            sortedLevels.Clear();
+            foreach (var b in inv.Owned) sortedLevels.Add(b.Level);
+            sortedLevels.Sort((x, y) => y.CompareTo(x));
+            int slots = gm.Stats.MaxBalls;
+            for (int i = 0; i < tokens.Count; i++)
+            {
+                var (img, label) = tokens[i];
+                bool visible = i < Mathf.Max(slots, sortedLevels.Count);
+                img.gameObject.SetActive(visible);
+                if (!visible) continue;
+                if (i < sortedLevels.Count)
+                {
+                    img.sprite = SpriteFactory.Sphere;
+                    img.color = Balance.LevelColor(sortedLevels[i]);
+                    label.text = sortedLevels[i].ToString();
+                }
+                else
+                {
+                    img.sprite = SpriteFactory.Ring;              // hueco libre
+                    img.color = new Color(1, 1, 1, 0.18f);
+                    label.text = "";
+                }
+            }
+
+            double cost = inv.BuyCost;
+            bool canBuy = inv.HasFreeSlot && gm.Money >= cost;
+            buyButton.interactable = canBuy;
+            buyLabel.text = inv.HasFreeSlot
+                ? "+ BOLA  <size=22>" + inv.Count + "/" + slots + "</size>\n<size=24>" + NumberFormat.Money(cost) + "</size>"
+                : "HUECOS LLENOS\n<size=22>fusiona o amplía</size>";
+
+            int lv = inv.MergeableLevel();
+            mergeButton.interactable = lv > 0;
+            mergeLabel.text = lv > 0
+                ? "FUSIONAR\n<size=22>Nv" + lv + " + Nv" + lv + " → Nv" + (lv + 1) + "</size>"
+                : "FUSIONAR\n<size=22>sin parejas</size>";
         }
 
         void BuildTabs(RectTransform container)
@@ -872,18 +905,7 @@ namespace Plinko
             bestText.text = NumberFormat.Money(gm.State.bestDrop);
             if (gm.State.bestDrop > lastBest) { lastBest = gm.State.bestDrop; bestPunch.Play(); }
 
-            launchButton.interactable = gm.CanLaunch;
-            int maxNow = gm.MaxBallsNow;
-            float ratio = maxNow == 0 ? 0 : Mathf.Clamp01((float)gm.Balls.MainCount / maxNow);
-            capacityFill.anchorMax = new Vector2(ratio, 1);
-            capacityText.text = gm.Balls.MainCount + " / " + maxNow;
-
-            tierDot.color = s.Tier.Color;
-            tierText.text = "Bola <b>" + s.Tier.Name + "</b>";
-            autoText.text = "Auto " + (gm.LaunchInterval > 0
-                ? "<b>" + (1f / gm.LaunchInterval).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " bolas/s</b>"
-                : "<color=#7F88AA>apagado</color>");
-            evText.text = "Media cubos <b>" + NumberFormat.Multiplier(s.ExpectedBucketMultiplier()) + "</b>";
+            RefreshDock();
         }
 
         // ---------------------------------------------------------------- Etiquetas de cubos

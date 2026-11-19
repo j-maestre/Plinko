@@ -1,0 +1,131 @@
+using System.Collections.Generic;
+
+namespace Plinko
+{
+    /// <summary>Una bola que posee el jugador. Cae en bucle: al llegar a un cubo vuelve a la cola de goteo.</summary>
+    public class OwnedBall
+    {
+        public int Level = 1;
+        public bool InFlight;
+        public bool Removed;   // fusionada con otra: deja de existir
+    }
+
+    /// <summary>
+    /// Bolas del jugador: comprar (nivel 1), fusionar las dos de mayor nivel en una del nivel siguiente
+    /// y la cola de goteo que decide cuál cae a continuación.
+    /// </summary>
+    public class BallInventory
+    {
+        readonly GameManager gm;
+        readonly List<OwnedBall> owned = new List<OwnedBall>();
+        readonly LinkedList<OwnedBall> waiting = new LinkedList<OwnedBall>();
+
+        public IReadOnlyList<OwnedBall> Owned => owned;
+        public int Count => owned.Count;
+
+        public BallInventory(GameManager gm) { this.gm = gm; }
+
+        public void Load(List<int> levels)
+        {
+            owned.Clear();
+            waiting.Clear();
+            if (levels == null || levels.Count == 0) levels = new List<int> { 1 };
+            foreach (var l in levels) Add(new OwnedBall { Level = l < 1 ? 1 : l });
+        }
+
+        void Add(OwnedBall b)
+        {
+            owned.Add(b);
+            waiting.AddLast(b);
+        }
+
+        public void SaveTo(GameState state)
+        {
+            state.balls.Clear();
+            foreach (var b in owned) state.balls.Add(b.Level);
+        }
+
+        // --- Goteo ---
+
+        public OwnedBall TakeNextWaiting()
+        {
+            while (waiting.Count > 0)
+            {
+                var b = waiting.First.Value;
+                waiting.RemoveFirst();
+                if (!b.Removed && !b.InFlight) return b;
+            }
+            return null;
+        }
+
+        /// <summary>Una bola ha terminado de caer: vuelve a la cola.</summary>
+        public void ReturnToQueue(OwnedBall b)
+        {
+            if (!b.Removed && !waiting.Contains(b)) waiting.AddLast(b);
+        }
+
+        public int RandomLevel() => owned.Count == 0 ? 1 : owned[UnityEngine.Random.Range(0, owned.Count)].Level;
+
+        public int HighestLevel()
+        {
+            int max = 1;
+            foreach (var b in owned) if (b.Level > max) max = b.Level;
+            return max;
+        }
+
+        // --- Comprar ---
+
+        public double BuyCost => Balance.BallCost(gm.State.ballsBought);
+        public bool HasFreeSlot => owned.Count < gm.Stats.MaxBalls;
+
+        public bool TryBuy()
+        {
+            if (!HasFreeSlot || gm.State.money < BuyCost) return false;
+            gm.State.money -= BuyCost;
+            gm.State.ballsBought++;
+            Add(new OwnedBall { Level = 1 });
+            SaveTo(gm.State);
+            return true;
+        }
+
+        // --- Fusionar ---
+
+        /// <summary>Nivel de la siguiente fusión (el mayor que tenga al menos dos bolas), o 0 si no hay.</summary>
+        public int MergeableLevel()
+        {
+            var counts = new Dictionary<int, int>();
+            int best = 0;
+            foreach (var b in owned)
+            {
+                counts.TryGetValue(b.Level, out int c);
+                counts[b.Level] = ++c;
+                if (c >= 2 && b.Level > best) best = b.Level;
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// Fusiona dos bolas del mayor nivel posible. Devuelve la bola resultante y la que desaparece
+        /// (para quitarlas del tablero si estaban cayendo).
+        /// </summary>
+        public bool TryMerge(out OwnedBall result, out OwnedBall consumed)
+        {
+            result = consumed = null;
+            int level = MergeableLevel();
+            if (level == 0) return false;
+            foreach (var b in owned)
+            {
+                if (b.Level != level) continue;
+                if (result == null) result = b;
+                else { consumed = b; break; }
+            }
+            consumed.Removed = true;
+            owned.Remove(consumed);
+            waiting.Remove(consumed);
+            waiting.Remove(result);
+            result.Level++;
+            SaveTo(gm.State);
+            return true;
+        }
+    }
+}

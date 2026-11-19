@@ -66,10 +66,9 @@ namespace Plinko
         {
             new PrestigeDef
             {
-                Id = PrestigeIds.BallTier, Name = "Calidad de bola", Desc = "Bolas mucho más valiosas, pero caben menos y salen más despacio",
+                Id = PrestigeIds.BallTier, Name = "Calidad de bola", Desc = "Todas tus bolas valen más, para siempre",
                 BaseCost = 3, Growth = 2.5, MaxLevel = Balance.Tiers.Length - 1,
-                Effect = l => Balance.Tiers[l].Name + " (valor " + NumberFormat.Format(Balance.Tiers[l].Value) + ", " +
-                              (int)Math.Round(Balance.TierCapacityFactor(l) * 100) + "% bolas)"
+                Effect = l => Balance.Tiers[l].Name + " (valor base " + NumberFormat.Format(Balance.Tiers[l].Value) + ")"
             },
             new PrestigeDef
             {
@@ -98,9 +97,9 @@ namespace Plinko
             },
             new PrestigeDef
             {
-                Id = PrestigeIds.StartAuto, Name = "Arranque automático", Desc = "Empiezas con niveles de auto-lanzador",
+                Id = PrestigeIds.StartAuto, Name = "Goteo inicial", Desc = "Empiezas cada partida con niveles de Goteo",
                 BaseCost = 2, Growth = 1.9, MaxLevel = 10,
-                Effect = l => "Auto-lanzador nv " + PrestigeBalance.StartAuto(l)
+                Effect = l => "Goteo nv " + PrestigeBalance.StartAuto(l)
             },
             new PrestigeDef
             {

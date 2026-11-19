@@ -28,6 +28,10 @@ namespace Plinko
         public int prestigeCount;
         public List<UpgradeEntry> prestigeUpgrades = new List<UpgradeEntry>();
         public List<string> unlockedTabs = new List<string>(); // secciones compradas (permanentes)
+
+        // --- Bolas del jugador (niveles) ---
+        public List<int> balls = new List<int> { 1 };
+        public int ballsBought;
         public List<UpgradeEntry> upgrades = new List<UpgradeEntry>();
         public long lastSaveUnix;
     }

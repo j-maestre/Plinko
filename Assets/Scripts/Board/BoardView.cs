@@ -178,6 +178,37 @@ namespace Plinko
 
         public Color BucketColor(int i) => buckets[i].color;
 
+        // --- Cámara cinemática (intro de la Avalancha) ---
+        bool cinematic;
+        Vector2 cinePos;
+        float cineSize, baseSize;
+
+        public SpriteRenderer BucketRenderer(int i) => buckets[i];
+        public Vector3 BucketBaseScale => bucketScale;
+        public Vector2 CameraBasePos => camBase;
+        public float CameraBaseSize => baseSize;
+
+        public void SetCinematic(Vector2 camPos, float size)
+        {
+            cinematic = true;
+            cinePos = camPos;
+            cineSize = size;
+        }
+
+        public void EndCinematic()
+        {
+            cinematic = false;
+            if (cam != null) { cam.orthographicSize = baseSize; cam.transform.position = camBase; }
+        }
+
+        /// <summary>Posición de cámara para que un punto quede centrado en la zona visible del tablero con ese zoom.</summary>
+        public Vector2 CameraPosFocusing(Vector2 world, float size)
+        {
+            float frac = TopEdge - TopUI - OverloadBar - BottomUI;
+            float screenCenter = BottomUI + frac * 0.5f;
+            return new Vector2(world.x, world.y - (screenCenter - 0.5f) * 2f * size);
+        }
+
         public void FlashPeg(int r, int k, Color ballColor)
         {
             int i = PegIndex(r, k);
@@ -296,7 +327,13 @@ namespace Plinko
 
             if (Screen.width != lastScreen.x || Screen.height != lastScreen.y) FitCamera();
 
-            if (cam != null)
+            if (cam != null && cinematic)
+            {
+                // la cinemática manda: posición y zoom fijados desde fuera (con tiempo congelado)
+                cam.transform.position = new Vector3(cinePos.x, cinePos.y, camBase.z);
+                cam.orthographicSize = cineSize;
+            }
+            else if (cam != null)
             {
                 if (trauma > 0)
                 {
@@ -329,6 +366,7 @@ namespace Plinko
 
             cam.orthographic = true;
             cam.orthographicSize = size;
+            baseSize = size;
             float boardCenterY = (top + bottom) * 0.5f;
             float screenCenter = BottomUI + frac * 0.5f; // 0..1 desde abajo
             var p = cam.transform.position;

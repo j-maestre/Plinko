@@ -22,6 +22,9 @@ namespace Plinko
         public FxSystem Fx { get; private set; }
         public AudioFx Audio { get; private set; }
         public BackgroundView Background { get; private set; }
+        public BallInventory Inventory { get; private set; }
+        /// <summary>Se compra o fusiona una bola.</summary>
+        public event Action BallsChanged;
 
         public double Money => State.money;
         public double IncomePerSecond => income.PerSecond;
@@ -35,6 +38,10 @@ namespace Plinko
 
         // --- Avalancha ---
         public bool InRush { get; private set; }
+        /// <summary>Toca avalancha: la siguiente bola que caiga en un cubo la provoca.</summary>
+        public bool RushPending { get; private set; }
+        public AvalancheIntro Intro { get; private set; }
+        float pendingTime;
         public float RushTimeLeft { get; private set; }
         float rushTimer;
 
@@ -96,6 +103,8 @@ namespace Plinko
 
             Stats = new Stats(this);
             Stats.Recalculate();
+            Inventory = new BallInventory(this);
+            Inventory.Load(State.balls);
 
             var cam = Camera.main;
             if (cam != null) cam.backgroundColor = new Color(0.07f, 0.08f, 0.13f);
@@ -112,6 +121,9 @@ namespace Plinko
             Fx.transform.SetParent(transform, false);
             Audio = new GameObject("Audio").AddComponent<AudioFx>();
             Audio.transform.SetParent(transform, false);
+
+            Intro = new GameObject("AvalancheIntro").AddComponent<AvalancheIntro>();
+            Intro.transform.SetParent(transform, false);
 
             Balls = new GameObject("BallSystem").AddComponent<BallSystem>();
             Balls.transform.SetParent(transform, false);
@@ -141,18 +153,18 @@ namespace Plinko
             UpdateOverload(dt);
             UpdateRush(dt);
 
+            // Goteo: las bolas del jugador caen solas, una detrás de otra
             float interval = LaunchInterval;
-            if (interval > 0)
+            autoTimer += dt;
+            int launched = 0;
+            while (autoTimer >= interval && launched < 8) // varias por frame si el ritmo es muy alto
             {
-                autoTimer += dt;
-                int launched = 0;
-                while (autoTimer >= interval && launched < 8) // varias por frame si el ritmo es muy alto
-                {
-                    if (!CanLaunch) { autoTimer = interval; break; } // espera a que haya hueco
-                    Balls.Launch();
-                    autoTimer -= interval;
-                    launched++;
-                }
+                var next = Inventory.TakeNextWaiting();
+                if (next != null) Balls.Launch(next);
+                else if ((InRush || InOverload) && Balls.ActiveCount < MaxBallsNow) Balls.LaunchTemp(Inventory.RandomLevel());
+                else { autoTimer = interval; break; } // todas cayendo: espera
+                autoTimer -= interval;
+                launched++;
             }
 
             saveTimer += dt;
@@ -162,10 +174,9 @@ namespace Plinko
             var kb = Keyboard.current;
             if (kb != null)
             {
-                if (kb.spaceKey.isPressed) ManualLaunch();
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 if (kb.mKey.wasPressedThisFrame) DebugAddMoney();
-                if (kb.eKey.wasPressedThisFrame && !InRush) StartRush();
+                if (kb.eKey.wasPressedThisFrame && !InRush) TriggerRushAt(UnityEngine.Random.Range(0, Board.BucketCount));
 #endif
             }
 #endif
@@ -177,9 +188,10 @@ namespace Plinko
         {
             get
             {
-                float max = Stats.MaxBalls;
+                // bolas en pantalla permitidas: las tuyas, y en Sobrecarga/Avalancha copias temporales extra
+                float max = Mathf.Max(1, Inventory.Count);
                 if (InOverload) max *= Balance.OverloadCapacityBoost;
-                if (InRush) max = Mathf.Min(max * Balance.RushBoost, Mathf.Max(Balance.RushMaxBalls, Stats.MaxBalls));
+                if (InRush) max = Mathf.Min(max * Balance.RushBoost, Mathf.Max(Balance.RushMaxBalls, Inventory.Count));
                 return Mathf.RoundToInt(max);
             }
         }
@@ -190,21 +202,33 @@ namespace Plinko
             get
             {
                 float interval = Stats.AutoInterval;
-                if (InRush && interval <= 0) interval = Balance.RushMinInterval;
-                if (interval <= 0) return 0;
                 if (InOverload) interval /= Balance.OverloadLaunchBoost;
                 if (InRush) interval /= Balance.RushBoost;
                 return interval;
             }
         }
-        public bool CanLaunch => Balls.MainCount < MaxBallsNow;
-        public bool ManualReady => manualCooldown <= 0 && CanLaunch;
+        // --- Bolas: comprar y fusionar ---
 
-        public void ManualLaunch()
+        public bool TryBuyBall()
         {
-            if (!ManualReady) return;
-            Balls.Launch();
-            manualCooldown = Balance.ManualCooldown;
+            if (!Inventory.TryBuy()) return false;
+            Audio.Buy();
+            BallsChanged?.Invoke();
+            MoneyChanged?.Invoke();
+            return true;
+        }
+
+        /// <summary>Fusiona las dos bolas de mayor nivel. Si estaban cayendo desaparecen y la nueva cae desde arriba.</summary>
+        public bool TryMerge()
+        {
+            if (!Inventory.TryMerge(out var result, out var consumed)) return false;
+            Balls.RemoveFlying(consumed);
+            Balls.RemoveFlying(result);
+            Balls.Launch(result, true);
+            Audio.Record();
+            UI.Popup(Board.SpawnPos + Vector2.up * 0.6f, "¡Nivel " + result.Level + "!", Balance.LevelColor(result.Level), 0.9f);
+            BallsChanged?.Invoke();
+            return true;
         }
 
         // --- Economía ---
@@ -255,8 +279,15 @@ namespace Plinko
             if (!InRush)
             {
                 if (rushTimer <= 0) rushTimer = UnityEngine.Random.Range(Balance.RushMinDelay, Balance.RushMaxDelay) * Stats.RushDelayFactor;
+                if (RushPending || Intro.Playing)
+                {
+                    // si no cae ninguna bola en un rato, se dispara igualmente en el cubo central
+                    pendingTime += dt;
+                    if (!Intro.Playing && pendingTime > 20f) TriggerRushAt(Board.Rows / 2);
+                    return;
+                }
                 rushTimer -= dt;
-                if (rushTimer <= 0) StartRush();
+                if (rushTimer <= 0) { RushPending = true; pendingTime = 0; }
                 return;
             }
             RushTimeLeft -= dt;
@@ -266,6 +297,18 @@ namespace Plinko
                 rushTimer = UnityEngine.Random.Range(Balance.RushMinDelay, Balance.RushMaxDelay) * Stats.RushDelayFactor;
                 RushEnded?.Invoke();
             }
+        }
+
+        /// <summary>Una bola ha caído en este cubo con la avalancha pendiente: empieza la cinemática.</summary>
+        public void TriggerRushAt(int bucket)
+        {
+            if (InRush || Intro.Playing) return;
+            RushPending = false;
+            Intro.Play(bucket, () =>
+            {
+                StartRush();
+                Balls.LaunchVolley(Mathf.Min(40, MaxBallsNow - Balls.ActiveCount)); // la ráfaga inicial
+            });
         }
 
         public void StartRush()
@@ -421,6 +464,8 @@ namespace Plinko
             State.overload = 0;
             State.upgrades.Clear();
             levels.Clear();
+            State.balls = new System.Collections.Generic.List<int> { 1 };
+            State.ballsBought = 0;
 
             // ventajas de inicio compradas en la tienda
             int startAuto = PrestigeBalance.StartAuto(GetPrestigeLevel(PrestigeIds.StartAuto));
@@ -429,14 +474,17 @@ namespace Plinko
 
             if (InOverload) { InOverload = false; OverloadEnded?.Invoke(); }
             if (InRush) { InRush = false; RushEnded?.Invoke(); }
+            RushPending = false;
             rushTimer = 0;
             autoTimer = 0;
             Stats.Recalculate();
             Balls.ClearAll();
+            Inventory.Load(State.balls);
             Board.Build(Stats.Rows, Stats.GoldenPegs, Stats.ClonePegs);
             Save();
             ProgressReset?.Invoke();
             Prestiged?.Invoke();
+            BallsChanged?.Invoke();
             MoneyChanged?.Invoke();
             UpgradesChanged?.Invoke();
         }
@@ -450,6 +498,8 @@ namespace Plinko
             prestigeLevels.Clear();
             Stats.Recalculate();
             Balls.ClearAll();
+            Inventory.Load(State.balls);
+            BallsChanged?.Invoke();
             Board.Build(Stats.Rows, Stats.GoldenPegs, Stats.ClonePegs);
             autoTimer = 0;
             if (InOverload) { InOverload = false; OverloadEnded?.Invoke(); }

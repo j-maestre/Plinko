@@ -32,7 +32,6 @@ namespace Plinko
         public const string Capacity = "capacity";
         public const string GoldenBall = "golden_ball";
         public const string PegFlat = "peg_flat";
-        public const string PegPercent = "peg_pct";
         public const string BonusChance = "bonus_chance";
         public const string BonusAmount = "bonus_amount";
         public const string Crit = "crit";
@@ -71,15 +70,15 @@ namespace Plinko
             {
                 new UpgradeDef
                 {
-                    Id = UpgradeIds.AutoLauncher, Name = "Auto-lanzador", Desc = "Lanza bolas solo, sin tocar nada", Category = UpgradeCategory.Bolas,
-                    BaseCost = 50, Growth = 2.4, MaxLevel = 15,
-                    Effect = l => l == 0 ? "Apagado" : (1f / Balance.AutoInterval(l)).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " bolas/s"
+                    Id = UpgradeIds.AutoLauncher, Name = "Goteo", Desc = "Las bolas salen más seguidas", Category = UpgradeCategory.Bolas,
+                    BaseCost = 3000, Growth = 3.2, MaxLevel = 10,
+                    Effect = l => "1 bola cada " + NumberFormat.Seconds(Balance.AutoInterval(l))
                 },
                 new UpgradeDef
                 {
-                    Id = UpgradeIds.Capacity, Name = "Capacidad", Desc = "Más bolas cayendo a la vez", Category = UpgradeCategory.Bolas,
-                    BaseCost = 5000, Growth = 3.0, MaxLevel = 12,
-                    Effect = l => Balance.MaxBalls(l) + " bolas en pantalla"
+                    Id = UpgradeIds.Capacity, Name = "Huecos", Desc = "Puedes tener más bolas a la vez", Category = UpgradeCategory.Bolas,
+                    BaseCost = 400, Growth = 3.0, MaxLevel = 12,
+                    Effect = l => Balance.MaxBalls(l) + " huecos"
                 },
                 new UpgradeDef
                 {
@@ -90,16 +89,9 @@ namespace Plinko
                 },
                 new UpgradeDef
                 {
-                    Id = UpgradeIds.PegFlat, Name = "Pinchos reforzados", Desc = "Dinero fijo cada vez que una bola toca un pincho", Category = UpgradeCategory.Pinchos,
-                    BaseCost = 200, Growth = 2.5, MaxLevel = 300,
-                    Effect = l => "+" + NumberFormat.Format(Balance.PegFlat(l)) + " por rebote"
-                },
-                new UpgradeDef
-                {
-                    Id = UpgradeIds.PegPercent, Name = "Pinchos resonantes", Desc = "Cada rebote da un % del valor actual de la bola", Category = UpgradeCategory.Pinchos,
-                    BaseCost = 1000000, Growth = 2.5, MaxLevel = 34,
-                    RequiresId = UpgradeIds.PegFlat, RequiresLevel = 10,
-                    Effect = l => "+" + NumberFormat.Percent(Balance.PegPercent(l)) + " del valor por rebote"
+                    Id = UpgradeIds.PegFlat, Name = "Pinchos reforzados", Desc = "Cada rebote da un % del valor de la bola", Category = UpgradeCategory.Pinchos,
+                    BaseCost = 200, Growth = 2.5, MaxLevel = 40,
+                    Effect = l => NumberFormat.Percent(Balance.BasePegPercent + Balance.PegPercentBonus(l)) + " del valor por rebote"
                 },
                 new UpgradeDef
                 {
@@ -227,12 +219,11 @@ namespace Plinko
             var chain = new Dictionary<string, (string req, int lvl)>
             {
                 // Bolas
-                { UpgradeIds.Capacity,    (UpgradeIds.AutoLauncher, 2) },
+                { UpgradeIds.AutoLauncher, (UpgradeIds.Capacity, 2) },   // Huecos disponibles desde el inicio; Goteo después
                 { UpgradeIds.GoldenBall,  (UpgradeIds.Capacity, 4) },
                 // Pinchos
                 { UpgradeIds.Rows,        (UpgradeIds.PegFlat, 4) },
                 { UpgradeIds.GoldenPegs,  (UpgradeIds.PegFlat, 5) },
-                { UpgradeIds.PegPercent,  (UpgradeIds.PegFlat, 8) },
                 { UpgradeIds.ClonePegs,   (UpgradeIds.GoldenPegs, 1) },
                 // Rebotes
                 { UpgradeIds.BonusChance, (UpgradeIds.PegFlat, 3) },
