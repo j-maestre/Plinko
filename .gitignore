@@ -39,3 +39,6 @@ crashlytics-build.properties
 # SO
 .DS_Store
 Thumbs.db
+
+# Temporales del build de Android
+/.utmp/
