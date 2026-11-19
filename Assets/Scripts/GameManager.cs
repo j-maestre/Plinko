@@ -65,7 +65,10 @@ namespace Plinko
         {
             if (Instance != null && Instance != this) { Destroy(gameObject); return; }
             Instance = this;
-            Application.targetFrameRate = 60;
+            // Hasta 120 fps (o el refresco de la pantalla si es menor): todo se ve más fluido
+            QualitySettings.vSyncCount = 0;
+            int refresh = Mathf.RoundToInt((float)Screen.currentResolution.refreshRateRatio.value);
+            Application.targetFrameRate = refresh >= 60 ? Mathf.Min(120, refresh) : 120;
 
             // Juego de móvil en vertical
             Screen.orientation = ScreenOrientation.Portrait;
