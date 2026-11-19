@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Permisos y proveedor para el auto-actualizador (solo builds de prueba fuera de Google Play). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.plinko.updater.manifest">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <application>
+        <!-- Comparte el APK descargado con el instalador del sistema (content://<paquete>.apkprovider/...) -->
+        <provider
+            android:name="com.plinko.updater.ApkProvider"
+            android:authorities="${applicationId}.apkprovider"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+    </application>
+</manifest>
