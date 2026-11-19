@@ -9,19 +9,23 @@ namespace Plinko
         static readonly string[] Suffixes = { "", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc" };
         static readonly CultureInfo CI = CultureInfo.InvariantCulture;
 
+        /// <summary>
+        /// Sin decimales: se muestran entre 2 y 4 cifras enteras con sufijo.
+        /// 950 → "950", 1.234 → "1234", 12.345 → "12K", 1.500.000 → "1500K", 66.300 Qa → "66Qa".
+        /// </summary>
         public static string Format(double v)
         {
             if (double.IsNaN(v)) return "0";
             if (double.IsInfinity(v)) return "∞";
             if (v < 0) return "-" + Format(-v);
-            if (v < 1000) return v.ToString(v < 100 ? "0.#" : "0", CI);
+            if (v < 10000) return Math.Floor(v).ToString("0", CI);
 
             int tier = (int)Math.Floor(Math.Log10(v) / 3.0);
             double scaled = v / Math.Pow(1000, tier);
-            if (scaled >= 999.5) { tier++; scaled /= 1000; }
-
-            string fmt = scaled < 10 ? "0.00" : scaled < 100 ? "0.0" : "0";
-            return scaled.ToString(fmt, CI) + Suffix(tier);
+            if (scaled < 10) { tier--; scaled *= 1000; }   // 1.5M -> 1500K: cuatro cifras en vez de decimales
+            scaled = Math.Floor(scaled);
+            if (scaled >= 10000) { tier++; scaled = Math.Floor(scaled / 1000); }
+            return scaled.ToString("0", CI) + Suffix(tier);
         }
 
         static string Suffix(int tier)
@@ -36,9 +40,11 @@ namespace Plinko
         /// <summary>Cantidad de dinero con símbolo: $1.23K</summary>
         public static string Money(double v) => "$" + Format(v);
 
-        public static string Multiplier(double m) => "x" + m.ToString(m < 10 ? "0.0#" : "0.#", CI);
+        /// <summary>Multiplicadores: x1.5 conserva un decimal (significa algo); a partir de x10, entero.</summary>
+        public static string Multiplier(double m) => "x" + m.ToString(m < 10 ? "0.#" : "0", CI);
 
-        public static string Percent(double p) => (p * 100).ToString("0.##", CI) + "%";
+        /// <summary>Porcentajes enteros (solo por debajo del 1% se deja un decimal: 0.5%).</summary>
+        public static string Percent(double p) => (p * 100).ToString(p < 0.01 ? "0.#" : "0", CI) + "%";
 
         public static string Seconds(float s) => s.ToString(s < 1 ? "0.00" : "0.0", CI) + "s";
     }

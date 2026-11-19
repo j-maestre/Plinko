@@ -228,6 +228,7 @@ namespace Plinko
             Audio.Record();
             UI.Popup(Board.SpawnPos + Vector2.up * 0.6f, "¡Nivel " + result.Level + "!", Balance.LevelColor(result.Level), 0.9f);
             BallsChanged?.Invoke();
+            MoneyChanged?.Invoke();
             return true;
         }
 

@@ -52,6 +52,8 @@ namespace Plinko
         public const double MergeMultiplier = 2.3;   // dos bolas iguales -> una que vale un poco más que las dos juntas
         public static double BallValue(int tier, int level) => Tiers[tier].Value * Math.Pow(MergeMultiplier, level - 1);
         public static double BallCost(int bought) => 20 * Math.Pow(1.25, bought);
+        /// <summary>Fusionar cuesta caro: 20 veces lo que vale la bola resultante en cada caída.</summary>
+        public static double MergeCost(int tier, int newLevel) => 20 * BallValue(tier, newLevel);
 
         static readonly Color[] LevelColors =
         {

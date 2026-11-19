@@ -535,9 +535,10 @@ namespace Plinko
                 : "HUECOS LLENOS\n<size=22>fusiona o amplía</size>";
 
             int lv = inv.MergeableLevel();
-            mergeButton.interactable = lv > 0;
+            double mergeCost = inv.MergeCost;
+            mergeButton.interactable = lv > 0 && gm.Money >= mergeCost;
             mergeLabel.text = lv > 0
-                ? "FUSIONAR\n<size=22>Nv" + lv + " + Nv" + lv + " → Nv" + (lv + 1) + "</size>"
+                ? "FUSIONAR  <size=22>Nv" + lv + " → " + (lv + 1) + "</size>\n<size=24>" + NumberFormat.Money(mergeCost) + "</size>"
                 : "FUSIONAR\n<size=22>sin parejas</size>";
         }
 

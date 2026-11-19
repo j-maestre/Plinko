@@ -108,11 +108,24 @@ namespace Plinko
         /// Fusiona dos bolas del mayor nivel posible. Devuelve la bola resultante y la que desaparece
         /// (para quitarlas del tablero si estaban cayendo).
         /// </summary>
+        /// <summary>Precio de la siguiente fusión (0 si no hay pareja).</summary>
+        public double MergeCost
+        {
+            get
+            {
+                int level = MergeableLevel();
+                return level == 0 ? 0 : Balance.MergeCost(gm.Stats.TierIndex, level + 1);
+            }
+        }
+
         public bool TryMerge(out OwnedBall result, out OwnedBall consumed)
         {
             result = consumed = null;
             int level = MergeableLevel();
             if (level == 0) return false;
+            double cost = Balance.MergeCost(gm.Stats.TierIndex, level + 1);
+            if (gm.State.money < cost) return false;
+            gm.State.money -= cost;
             foreach (var b in owned)
             {
                 if (b.Level != level) continue;
