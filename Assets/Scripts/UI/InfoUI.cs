@@ -13,9 +13,9 @@ namespace Plinko
         static readonly (string title, string body)[] Pages =
         {
             ("¡Bienvenido a Plinko!", "Tus bolas caen solas por el tablero. Cada rebote en un pincho da dinero, y el cubo en el que caen lo multiplica."),
-            ("Compra bolas", "Pulsa COMPRAR para añadir una bola de madera. La primera es gratis. Cada bola ocupa un hueco: amplía huecos en la pestaña Bolas."),
+            ("Compra bolas", "Pulsa COMPRAR para añadir una bola de madera: empiezas con el dinero justo para la primera. Cada bola ocupa un hueco: amplía huecos en la pestaña Bolas."),
             ("Fusiona", "FUSIONAR junta tus dos bolas iguales de mayor nivel en una de un material mejor, que vale mucho más: madera → bronce → plata → hierro…"),
-            ("Mejora", "En las pestañas de abajo mejoras huecos, goteo, pinchos y más. Las mejoras con \"???\" se descubren al avanzar."),
+            ("Mejora", "En las pestañas de abajo mejoras huecos, velocidad de caída, pinchos y más. Las mejoras con \"???\" se descubren al avanzar."),
             ("Momentos especiales", "Llena la barra de SOBRECARGA rebotando para multiplicar todo. Y de vez en cuando, una bola desatará la AVALANCHA."),
             ("Prestigio", "Con mucho dinero podrás reiniciar en PRESTIGIO a cambio de lingotes de oro: desbloquean secciones nuevas y mejoras permanentes."),
         };
@@ -32,7 +32,7 @@ namespace Plinko
 
         // lista de bolas
         RectTransform list;
-        readonly List<(int level, Text value, Text merge, Text owned)> listRows = new List<(int, Text, Text, Text)>();
+        readonly List<(int level, Image icon, Text name, Text value, Text merge, Text owned)> listRows = new List<(int, Image, Text, Text, Text, Text)>();
 
         public void Init(GameManager gm, RectTransform canvasRoot)
         {
@@ -40,13 +40,8 @@ namespace Plinko
             root = canvasRoot;
 
             float top = BoardView.TopEdge - BoardView.TopUI - BoardView.OverloadBar;
-            RoundButton("Help", "?", new Vector2(0.93f, top - 0.035f), () => OpenTutorial());
-            RoundButton("Balls", "i", new Vector2(0.93f, top - 0.085f), OpenList);
-
-            BuildTutorial();
-            BuildList();
-
-            if (!gm.State.tutorialDone) Invoke(nameof(OpenFirstTime), 1f);
+            RoundButton("Balls", "i", new Vector2(0.93f, top - 0.035f), OpenList);
+            BuildList();   // el tutorial ahora son flechas sobre el juego (GameUI)
         }
 
         void OpenFirstTime() => OpenTutorial();
@@ -191,15 +186,15 @@ namespace Plinko
                 img.raycastTarget = false;
 
                 const float left = 124;
-                UIFactory.Text(UIFactory.Inset(UIFactory.Rect("Name", body, new Vector2(0, 0.52f), new Vector2(0.62f, 0.95f)), left, 0, 0, 0),
-                    "<size=24><color=#9AA3C8>Nv " + level + "</color></size>  " + BallMaterials.GetName(level), 32, UIFactory.TextMain, TextAnchor.MiddleLeft, true);
+                var name = UIFactory.Text(UIFactory.Inset(UIFactory.Rect("Name", body, new Vector2(0, 0.52f), new Vector2(0.62f, 0.95f)), left, 0, 0, 0),
+                    "", 32, UIFactory.TextMain, TextAnchor.MiddleLeft, true);
                 var merge = UIFactory.Text(UIFactory.Inset(UIFactory.Rect("Merge", body, new Vector2(0, 0.06f), new Vector2(0.62f, 0.5f)), left, 0, 0, 0),
                     "", 22, UIFactory.TextDim, TextAnchor.MiddleLeft);
                 var value = UIFactory.Text(UIFactory.Inset(UIFactory.Rect("Value", body, new Vector2(0.6f, 0.45f), new Vector2(1, 0.95f)), 0, 0, 20, 0),
                     "", 32, new Color(0.49f, 0.89f, 0.55f), TextAnchor.MiddleRight, true);
                 var owned = UIFactory.Text(UIFactory.Inset(UIFactory.Rect("Owned", body, new Vector2(0.6f, 0.06f), new Vector2(1, 0.45f)), 0, 0, 20, 0),
                     "", 22, UIFactory.Gold, TextAnchor.MiddleRight);
-                listRows.Add((level, value, merge, owned));
+                listRows.Add((level, img, name, value, merge, owned));
             }
         }
 
@@ -208,12 +203,19 @@ namespace Plinko
             int tier = gm.Stats.TierIndex;
             var counts = new Dictionary<int, int>();
             foreach (var b in gm.Inventory.Owned) { counts.TryGetValue(b.Level, out int c); counts[b.Level] = c + 1; }
-            foreach (var (level, value, merge, owned) in listRows)
+            int discovered = Mathf.Max(1, gm.State.maxLevel);
+            foreach (var (level, icon, name, value, merge, owned) in listRows)
             {
-                value.text = NumberFormat.Money(Balance.BallValue(tier, level));
-                merge.text = level == 1
-                    ? "Se compra con COMPRAR"
-                    : "Fusionar 2 de " + BallMaterials.GetName(level - 1) + ": " + NumberFormat.Money(Balance.MergeCost(tier, level));
+                bool known = level <= discovered;
+                icon.color = known ? Color.white : new Color(0.05f, 0.05f, 0.1f, 0.85f);   // silueta oscura
+                name.text = "<size=24><color=#9AA3C8>Nv " + level + "</color></size>  " + (known ? BallMaterials.GetName(level) : "???");
+                name.color = known ? UIFactory.TextMain : UIFactory.TextDim;
+                value.text = known ? NumberFormat.Money(Balance.BallValue(tier, level)) : "?";
+                value.color = known ? new Color(0.49f, 0.89f, 0.55f) : UIFactory.TextDim;
+                if (level == gm.Inventory.BuyLevel) merge.text = "Se compra con COMPRAR";
+                else if (level < gm.Inventory.BuyLevel) merge.text = "Ya compras bolas mejores";
+                else if (known) merge.text = "Fusionar 2 de " + BallMaterials.GetName(level - 1) + ": " + NumberFormat.Money(Balance.MergeCost(tier, level));
+                else merge.text = level == discovered + 1 ? "Fusiona dos " + BallMaterials.GetName(level - 1) + " para descubrirla" : "";
                 owned.text = counts.TryGetValue(level, out int n) ? "Tienes " + n : "";
             }
             list.gameObject.SetActive(true);

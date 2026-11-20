@@ -97,6 +97,42 @@ namespace Plinko
             return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size);
         }
 
+        static Sprite arrow;
+
+        /// <summary>Flecha apuntando hacia abajo (para el tutorial).</summary>
+        public static Sprite Arrow => arrow != null ? arrow : (arrow = MakeArrow(64, 96));
+
+        static Sprite MakeArrow(int w, int h)
+        {
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            var px = new Color32[w * h];
+            float headH = h * 0.45f;
+            for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                float fx = x + 0.5f, fy = y + 0.5f;
+                float a;
+                if (fy < headH)
+                {
+                    // punta: triángulo cuya anchura crece hacia arriba
+                    float half = (fy / headH) * (w * 0.5f);
+                    a = Mathf.Clamp01(half - Mathf.Abs(fx - w * 0.5f) + 0.5f);
+                }
+                else
+                {
+                    // tallo con extremo redondeado
+                    float half = w * 0.18f;
+                    a = Mathf.Clamp01(half - Mathf.Abs(fx - w * 0.5f) + 0.5f);
+                    float top = h - half;
+                    if (fy > top) a = Mathf.Min(a, Mathf.Clamp01(half - Vector2.Distance(new Vector2(fx, fy), new Vector2(w * 0.5f, top)) + 0.5f));
+                }
+                px[y * w + x] = new Color32(255, 255, 255, (byte)(a * 255));
+            }
+            tex.SetPixels32(px);
+            tex.Apply();
+            return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0f), 100);
+        }
+
         static Sprite sphere;
 
         /// <summary>

@@ -27,7 +27,7 @@ namespace Plinko
             public Vector2 Prev;        // posición del frame anterior (para estirar según velocidad)
             public float Impact;        // aplastamiento al chocar
             public float Spawn;         // escala de aparición 0..1
-            public bool IsGolden;       // bola dorada: vale x5, brilla y suelta chispas
+            public bool IsGolden;       // bola shiny: conserva su material, vale x5, brilla en arcoíris y suelta chispas
             public SpriteRenderer Halo;
             public Transform Shine;     // reflejo blanco fijo arriba a la izquierda
             public float HaloAlpha;     // brillo de base según el tipo de bola
@@ -36,6 +36,57 @@ namespace Plinko
             public OwnedBall Owner;     // bola del jugador (null = clon o copia temporal)
             public float SizeMul = 1f;  // las de más nivel son algo más grandes
             public Color Rest = Color.white; // color del SpriteRenderer en reposo (la textura ya trae el color)
+            public bool IsRush;         // bola brillante que decide el multiplicador de la Avalancha
+            public GameUI.BallTag Tag;  // etiqueta "+$X" que acumula lo ganado en pinchos
+        }
+
+        static readonly Color PegCoin = new Color(1f, 0.84f, 0.3f);
+        static readonly Color RushBallColor = new Color(0.6f, 1f, 1f);
+
+        /// <summary>La bola de la Avalancha está cayendo.</summary>
+        public bool RushBallActive { get; private set; }
+
+        /// <summary>
+        /// Bola brillante que cae despacio desde arriba del todo: el cubo donde caiga fija
+        /// el multiplicador de valor de toda la Avalancha.
+        /// </summary>
+        public void LaunchRushBall()
+        {
+            var b = Get();
+            b.Owner = null;
+            b.IsClone = false;
+            b.IsRush = true;
+            b.Value = 0;
+            b.SizeMul = 1.5f;
+            b.BaseColor = RushBallColor;
+            b.Sr.sprite = SpriteFactory.Sphere;
+            b.Rest = RushBallColor;
+            b.Sr.color = RushBallColor;
+            b.Path = PathGenerator.WithDrift(board.Rows, (float)gm.Stats.DriftChance);   // mismo reparto que las demás bolas
+            b.HaloAlpha = 0.75f;
+            SetGolden(b, false);
+            b.Halo.enabled = true;
+            b.Trail.time = 0.45f;
+            b.Row = 0;
+            b.Col = 0;
+            b.From = board.SpawnPos + Vector2.up * 0.6f;
+            b.To = board.PegContact(0, 0);
+            b.T = 0;
+            b.Duration = DropDuration * 2.5f;
+            b.Arc = 0;
+            b.Dropping = true;
+            b.Tr.localPosition = b.From;
+            b.Prev = b.From;
+            b.Spawn = 0;
+            ResetTrail(b);
+            active.Add(b);
+            RushBallActive = true;
+
+            gm.Fx.Ring(b.Tr.position, RushBallColor, 2.2f, 0.5f);
+            gm.Fx.Burst(b.Tr.position, RushBallColor, 24, 5f, 0.08f, 0.7f);
+            gm.UI.Popup((Vector2)b.Tr.position + Vector2.up * 0.5f, "¡BOLA DE AVALANCHA!", RushBallColor, 0.9f);
+            gm.Background.Pulse(RushBallColor, 0.6f);
+            gm.Audio.Special(0.8f);
         }
 
         const float DropDuration = 0.35f;
@@ -100,13 +151,14 @@ namespace Plinko
             b.HaloAlpha = TierHalo(gm.Stats.TierIndex);
             SetGolden(b, gm.Stats.GoldenBallChance > 0 && Random.value < gm.Stats.GoldenBallChance);
             if (b.IsGolden) b.Value *= gm.Stats.GoldenBallMultiplier;
+            if (gm.InRush) b.Value *= gm.RushMultiplier;
             b.Row = 0;
             b.Col = 0;
             float spread = gm.InRush ? 0.35f : 0.06f;
             b.From = board.SpawnPos + new Vector2(Random.Range(-spread, spread), Random.Range(0f, gm.InRush ? 0.3f : 0f));
             b.To = board.PegContact(0, 0) + new Vector2(Random.Range(-Jitter, Jitter), 0);
             b.T = 0;
-            b.Duration = DropDuration;
+            b.Duration = DropDuration / gm.Stats.FallSpeed;
             b.Arc = 0;
             b.Dropping = true;
             b.Tr.localPosition = b.From;
@@ -121,10 +173,11 @@ namespace Plinko
             gm.Audio.Launch();
             if (b.IsGolden)
             {
-                gm.Fx.Burst(b.From, GoldenBallColor, 16, 5f, 0.08f, 0.6f);
-                gm.Fx.Ring(b.From, GoldenBallColor, 1.6f, 0.4f);
+                for (int s = 0; s < 4; s++) gm.Fx.Burst(b.From, Shiny(s * 0.25f), 5, 5f, 0.08f, 0.6f);
+                gm.Fx.Ring(b.From, Shiny(Random.value), 1.6f, 0.4f);
+                gm.UI.Popup(b.From + Vector2.up * 0.4f, "¡SHINY!", Shiny(Random.value), 0.8f, true);
                 gm.Audio.Special(1.5f);
-                gm.Background.Pulse(GoldenBallColor, 0.5f);
+                gm.Background.Pulse(Shiny(Random.value), 0.5f);
             }
         }
 
@@ -179,16 +232,32 @@ namespace Plinko
                 if (!b.IsGolden && b.HaloAlpha > 0)
                     b.Halo.color = Alpha(b.BaseColor, b.HaloAlpha * (0.85f + 0.15f * Mathf.Sin(Time.time * 6f + i)));
 
+                if (b.IsRush)
+                {
+                    b.SparkTimer -= dt;
+                    if (b.SparkTimer <= 0)
+                    {
+                        b.SparkTimer = 0.03f;
+                        gm.Fx.Burst(b.Tr.position, Color.Lerp(RushBallColor, Color.white, Random.value), 1, 1.6f, 0.07f, 0.5f, -1f);
+                    }
+                    float glow = 0.6f + 0.25f * Mathf.Sin(Time.time * 10f);
+                    b.Halo.color = Alpha(Color.Lerp(RushBallColor, Color.white, 0.3f), glow);
+                    b.Sr.color = Color.Lerp(RushBallColor, Color.white, 0.5f + 0.5f * Mathf.Sin(Time.time * 14f));
+                }
+
                 if (b.IsGolden)
                 {
                     b.SparkTimer -= dt;
                     if (b.SparkTimer <= 0)
                     {
                         b.SparkTimer = 0.05f;
-                        gm.Fx.Burst(b.Tr.position, GoldenBallColor, 1, 1.2f, 0.06f, 0.4f, -2f);
+                        gm.Fx.Burst(b.Tr.position, Shiny(Random.value), 1, 1.2f, 0.06f, 0.4f, -2f);
                     }
                     float glow = 0.5f + 0.15f * Mathf.Sin(Time.time * 12f);
-                    b.Halo.color = Alpha(GoldenBallColor, glow);
+                    b.Halo.color = Alpha(Shiny(Time.time * 0.7f + i * 0.13f), glow);
+                    // destello que recorre la bola sin perder su textura
+                    float flash = Mathf.Pow(Mathf.Max(0f, Mathf.Sin(Time.time * 7f + i)), 6f);
+                    if (b.Pulse <= 0) b.Sr.color = Color.Lerp(Color.white, Shiny(Time.time * 0.7f + i * 0.13f), 0.25f + 0.25f * flash);
                 }
             }
         }
@@ -254,7 +323,7 @@ namespace Plinko
             HitPeg(b, b.Row, b.Col);
 
             // Eco: un saltito extra sobre el mismo pincho que vuelve a contar como golpe
-            if (!b.Echoing && gm.Stats.EchoChance > 0 && Random.value < gm.Stats.EchoChance)
+            if (!b.Echoing && !b.IsRush && gm.Stats.EchoChance > 0 && Random.value < gm.Stats.EchoChance)
             {
                 StartEcho(b);
                 return true;
@@ -272,7 +341,7 @@ namespace Plinko
             b.To = board.PegContact(b.Row, b.Col) + new Vector2(Random.Range(-0.02f, 0.02f), 0);
             b.T = 0;
             b.Dropping = false;
-            b.Duration = 0.2f;
+            b.Duration = 0.2f / gm.Stats.FallSpeed;
             b.Arc = 0.3f;
             gm.Fx.Ring(b.Tr.position, Alpha(EchoColor, 0.5f), 0.5f, 0.2f);
         }
@@ -291,8 +360,9 @@ namespace Plinko
             b.Dropping = false;
             // con más filas cada tramo va más rápido para que la caída total no se alargue
             float speed = Mathf.Min(1f, Mathf.Pow(8f / board.Rows, 0.75f));
-            b.Duration = Random.Range(MinSegment, MaxSegment) * speed;
+            b.Duration = Random.Range(MinSegment, MaxSegment) * speed / gm.Stats.FallSpeed;   // Caída rápida
             b.Arc = Random.Range(MinArc, MaxArc) * Mathf.Lerp(1f, speed, 0.5f);
+            if (b.IsRush) { b.Duration *= 2.2f; b.Arc *= 1.2f; }
         }
 
         void HitPeg(Ball b, int r, int k)
@@ -303,18 +373,38 @@ namespace Plinko
             gm.RegisterHit();
             // onda muy tenue en el pincho; con muchas bolas solo sale en una fracción de los golpes
             if (Random.value < 12f / Mathf.Max(12, active.Count))
-                gm.Fx.Ring(board.PegWorldPos(r, k), Alpha(b.BaseColor, 0.25f), 0.45f, 0.2f);
-            b.Impact = 1f;
+            {
+                Vector2 pegPos = board.PegWorldPos(r, k);
+                gm.Fx.Ring(pegPos, Alpha(b.BaseColor, 0.25f), 0.45f, 0.2f);
+                gm.Fx.Burst(pegPos, PegCoin, 2, 1.8f, 0.045f, 0.35f, -4f);   // chispita dorada: el pincho paga
+            }
+            // (la bola ya no se aplasta al chocar: solo reacciona el pincho)
             gm.Audio.Peg(r, board.Rows, active.Count);
+            if (b.IsRush)
+            {
+                gm.Fx.Burst(pos, RushBallColor, 6, 3f, 0.06f, 0.45f, -3f);
+                gm.Fx.Ring(board.PegWorldPos(r, k), Alpha(RushBallColor, 0.6f), 0.8f, 0.25f);
+                return;
+            }
 
             // Ingreso por rebote: fijo (escalado por tier) + % del valor actual de la bola
+            // Cada rebote no paga al momento: suma un % al valor de la bola, que se cobra al caer
+            // (y por tanto también se multiplica por el cubo)
             double income = b.Value * s.PegPercent;
-            if (income > 0) gm.Earn(income);
+            if (income > 0)
+            {
+                b.Value += income;
+                double shownIncome = income * gm.TotalMultiplier;
+                if (gm.InRush) gm.UI.RushPegs(shownIncome);
+                // la etiqueta solo sale cuando ya se ha comprado la mejora de los pinchos
+                else if (gm.GetLevel(UpgradeIds.PegFlat) > 0) b.Tag = gm.UI.TagAdd(b.Tag, b.Tr, shownIncome);
+            }
 
             var type = board.GetPegType(r, k);
             if (type == PegType.Golden)
             {
                 b.Value *= Balance.GoldenPegMultiplier;
+                if (b.Tag != null) gm.UI.TagMultiply(b.Tag, Balance.GoldenPegMultiplier);   // la etiqueta también x1.5
                 Pulse(b, GoldenFx);
                 gm.UI.Popup(pos, NumberFormat.Multiplier(Balance.GoldenPegMultiplier), GoldenFx, 0.8f);
                 gm.Fx.Burst(pos, GoldenFx, 10, 4f, 0.07f);
@@ -424,12 +514,12 @@ namespace Plinko
 
         void Land(Ball b)
         {
+            if (b.IsRush) { LandRush(b); return; }
             int k = board.BucketDistance(b.Col);
             double mult = gm.Stats.BucketMultiplier(k);
             double amount = b.Value * mult;
             gm.Earn(amount);
             board.PopBucket(b.Col);
-            if (gm.RushPending) gm.TriggerRushAt(b.Col);
             double shown = amount * gm.TotalMultiplier;
             bool record = gm.RegisterDrop(shown);
 
@@ -449,10 +539,27 @@ namespace Plinko
                 board.Shake(0.3f);
                 gm.Audio.Record();
                 gm.Background.Pulse(RecordColor, 0.8f);
+                gm.UI.Popup(pos + Vector2.up * 1.05f, "¡NUEVO RÉCORD!", new Color(1f, 0.22f, 0.22f), 1.25f);   // rojo para que destaque
             }
 
+            // la etiqueta de los pinchos cae al cubo, que ya cobra el valor aumentado
+            if (b.Tag != null) { gm.UI.TagLand(b.Tag, pos + Vector2.up * 0.5f); b.Tag = null; }
             gm.UI.Popup(pos + Vector2.up * 0.5f, "+" + NumberFormat.Money(shown),
                 record ? RecordColor : Color.Lerp(Color.white, bc, 0.35f), (record ? 0.95f : 0.7f) + 0.25f * t);
+        }
+
+        /// <summary>La bola de avalancha cae: el multiplicador de ese cubo se aplica a toda la Avalancha.</summary>
+        void LandRush(Ball b)
+        {
+            double mult = gm.Stats.BucketMultiplier(board.BucketDistance(b.Col));
+            Vector2 pos = b.Tr.position;
+            board.PopBucket(b.Col);
+            gm.Fx.Fountain(pos, RushBallColor, 24, 7f);
+            gm.Fx.Ring(pos, RushBallColor, 2.5f, 0.5f);
+            gm.Fx.Flash(pos, Alpha(RushBallColor, 0.7f), 2.2f, 0.3f);
+            board.Shake(0.5f);
+            gm.UI.Popup(pos + Vector2.up * 0.6f, NumberFormat.Multiplier(mult), RushBallColor, 1.6f);
+            gm.TriggerRushAt(b.Col, mult);
         }
 
         static Color Alpha(Color c, float a) => new Color(c.r, c.g, c.b, a);
@@ -501,6 +608,8 @@ namespace Plinko
             }
             b.Pulse = 0;
             b.Impact = 0;
+            b.Tag = null;
+            b.IsRush = false;
             b.IsGolden = false;
             b.Echoing = false;
             b.Tr.localScale = Vector3.one * BoardView.BallRadius * 2f;
@@ -515,14 +624,12 @@ namespace Plinko
             b.IsGolden = golden;
             b.Halo.enabled = golden || b.HaloAlpha > 0;
             b.SparkTimer = 0;
-            if (golden)
-            {
-                b.BaseColor = GoldenBallColor;
-                b.Rest = GoldenBallColor;           // tiñe de oro la textura
-                b.Sr.color = GoldenBallColor;
-            }
+            // la bola shiny conserva su material (el oro ya es un tipo de bola): solo brilla en arcoíris
             b.Trail.time = golden ? 0.3f : 0.12f;
         }
+
+        /// <summary>Color arcoíris para la bola shiny (t cualquiera, se repite cada 1).</summary>
+        static Color Shiny(float t) => Color.HSVToRGB(Mathf.Repeat(t, 1f), 0.55f, 1f);
 
         static void ResetTrail(Ball b)
         {
@@ -535,6 +642,8 @@ namespace Plinko
         void Recycle(int index, bool requeue = true)
         {
             var b = active[index];
+            if (b.IsRush) RushBallActive = false;
+            if (b.Tag != null) { gm.UI.TagDrop(b.Tag); b.Tag = null; }
             if (b.Owner != null)
             {
                 MainCount--;

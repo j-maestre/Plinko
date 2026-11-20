@@ -35,6 +35,7 @@ namespace Plinko
             public Image Badge;
             public Punch Punch;
             public GameObject Lock;
+            public Image Icon, Indicator;
         }
 
         // Tarjeta que sustituye a la lista cuando la sección está bloqueada
@@ -114,7 +115,7 @@ namespace Plinko
                 unlockCost.text = "Desbloquear  " + NumberFormat.Format(cost) + " lingotes";
                 unlockButton.interactable = cores >= cost;
                 unlockFill.gameObject.SetActive(cores < cost && cores > 0);
-                unlockFill.anchorMax = new Vector2(Mathf.Clamp01((float)(cores / cost)), 1);
+                SetFill(unlockFill, Mathf.Clamp01((float)(cores / cost)));
             }
             else
             {
@@ -210,6 +211,7 @@ namespace Plinko
             var info = new GameObject("InfoUI").AddComponent<InfoUI>();
             info.transform.SetParent(transform, false);
             info.Init(gm, root);   // tutorial y lista de bolas
+            BuildTutorialArrow();
 
             shownMoney = gm.Money;
             lastBest = gm.State.bestDrop;
@@ -355,8 +357,19 @@ namespace Plinko
             rushPunch = Punch.On(rt, 0.12f, 0.3f);
             rt.gameObject.SetActive(false);
 
+            // contador grande de lo que pagan los pinchos durante la avalancha
+            var prt = UIFactory.Rect("RushPegs", root, new Vector2(0.15f, top - 0.095f), new Vector2(0.85f, top - 0.045f));
+            rushPegsText = UIFactory.Text(prt, "", 46, TagColor, TextAnchor.MiddleCenter, true);
+            rushPegsText.gameObject.AddComponent<Outline>().effectColor = new Color(0.15f, 0.08f, 0f, 0.85f);
+            rushPegsPunch = Punch.On(prt, 0.08f, 0.15f);
+            prt.gameObject.SetActive(false);
+            gm.RushEnded += () => prt.gameObject.SetActive(false);
+
             gm.RushStarted += () =>
             {
+                rushPegs = 0;
+                rushPegsText.text = "";
+                prt.gameObject.SetActive(true);
                 rt.gameObject.SetActive(true);
                 rushPunch.Play(1.5f);
                 bannerQueueRush = true;
@@ -367,10 +380,24 @@ namespace Plinko
             gm.RushEnded += () => rt.gameObject.SetActive(false);
         }
 
+        Text rushPegsText;
+        Punch rushPegsPunch;
+        double rushPegs;
+        float rushPegsCooldown;
+
+        /// <summary>Suma lo que paga un pincho durante la avalancha al contador grande.</summary>
+        public void RushPegs(double amount)
+        {
+            rushPegs += amount;
+            rushPegsText.text = "Pinchos  +" + NumberFormat.Money(rushPegs);
+            if (rushPegsCooldown <= 0) { rushPegsPunch.Play(); rushPegsCooldown = 0.12f; }
+        }
+
         void UpdateRush(float dt)
         {
+            rushPegsCooldown -= dt;
             if (!gm.InRush) return;
-            rushText.text = "¡AVALANCHA!  x" + Balance.RushBoost + " bolas  " + Mathf.CeilToInt(gm.RushTimeLeft) + "s";
+            rushText.text = "¡AVALANCHA!  bolas " + NumberFormat.Multiplier(gm.RushMultiplier) + "  " + Mathf.CeilToInt(gm.RushTimeLeft) + "s";
             rushPulseTimer -= dt;
             if (rushPulseTimer <= 0)
             {
@@ -469,9 +496,17 @@ namespace Plinko
             border.sizeDelta = new Vector2(border.sizeDelta.x, 4);
             UIFactory.Image(border, new Color(UIFactory.PanelBorder.r, UIFactory.PanelBorder.g, UIFactory.PanelBorder.b, 0.6f), false);
 
-            BuildLaunchRow(UIFactory.Rect("LaunchRow", holder, new Vector2(0, 0.80f), new Vector2(1, 0.985f)));
-            BuildTabs(UIFactory.Rect("Tabs", holder, new Vector2(0.03f, 0.695f), new Vector2(0.97f, 0.785f)));
-            BuildList(UIFactory.Rect("Upgrades", holder, Vector2.zero, new Vector2(1, 0.685f)));
+            // barra de navegación fija abajo del todo, por encima de la zona de gestos del sistema
+            // alturas en fracción de pantalla, pasadas a fracción del panel: la fila de bolas y la barra
+            // mantienen su tamaño y la lista de mejoras se queda con lo que sobra
+            float P(float screenFrac) => screenFrac / BoardView.BottomUI;
+            float safe = BoardView.SafeBottom / BoardView.BottomUI;
+            float navH = P(0.066f);
+            float rowTop = 1f - P(0.0066f), rowBottom = rowTop - P(0.0814f);
+            BuildLaunchRow(UIFactory.Rect("LaunchRow", holder, new Vector2(0, rowBottom), new Vector2(1, rowTop)));
+            BuildList(UIFactory.Rect("Upgrades", holder, new Vector2(0, safe + navH), new Vector2(1, rowBottom - P(0.0044f))));
+            BuildTabs(UIFactory.Rect("NavBar", holder, new Vector2(0, safe), new Vector2(1, safe + navH)));
+            SelectTab(currentTab);   // pinta la barra ya creada
         }
 
         void BuildLaunchRow(RectTransform row)
@@ -485,6 +520,19 @@ namespace Plinko
                 int r = i / perRow, c = i % perRow;
                 float cx = (c + 0.5f) / perRow;
                 float cy = r == 0 ? 0.72f : 0.28f;
+                // copias detrás de cada bola: se ven en Sobrecarga/Avalancha para indicar x2, x3…
+                var copies = new Image[3];
+                for (int j = copies.Length - 1; j >= 0; j--)
+                {
+                    var g = UIFactory.Rect("Copy" + j, dock, new Vector2(cx, cy), new Vector2(cx, cy));
+                    g.sizeDelta = new Vector2(50, 50);
+                    g.anchoredPosition = new Vector2(11f * (j + 1), 9f * (j + 1));
+                    copies[j] = g.gameObject.AddComponent<Image>();
+                    copies[j].raycastTarget = false;
+                    g.gameObject.SetActive(false);
+                }
+                tokenCopies.Add(copies);
+
                 var rt = UIFactory.Rect("Ball" + i, dock, new Vector2(cx, cy), new Vector2(cx, cy));
                 rt.sizeDelta = new Vector2(56, 56);
                 var img = rt.gameObject.AddComponent<Image>();
@@ -495,10 +543,19 @@ namespace Plinko
                 tokens.Add((img, label));
             }
 
+            // indicador "x3" en la esquina de la fila durante Sobrecarga/Avalancha
+            var multRt = UIFactory.Rect("Mult", dock, new Vector2(1, 1), new Vector2(1, 1));
+            multRt.sizeDelta = new Vector2(110, 44);
+            multRt.anchoredPosition = new Vector2(-50, -6);
+            dockMult = UIFactory.Text(multRt, "", 34, new Color(1f, 0.55f, 0.85f), TextAnchor.MiddleRight, true);
+            dockMult.gameObject.AddComponent<Outline>().effectColor = new Color(0, 0, 0, 0.8f);
+            dockMultPunch = Punch.On(multRt, 0.2f, 0.3f);
+
             // Comprar: icono de bola de madera con un "+"
             var buyRt = UIFactory.Rect("Buy", row, new Vector2(0.62f, 0.53f), new Vector2(0.97f, 0.96f));
             buyButton = ActionButton(buyRt, BuyColor, "COMPRAR", out buyLabel, out buyPrice, out var buyIcon);
             buyIconImg = IconBall(buyIcon, new Vector2(0, 0), 46, 1);
+            buyIconPunch = Punch.On((RectTransform)buyIconImg.transform, 0.3f, 0.35f);
             var plus = UIFactory.Rect("Plus", buyIcon, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
             plus.sizeDelta = new Vector2(24, 24);
             plus.anchoredPosition = new Vector2(17, 15);
@@ -522,10 +579,87 @@ namespace Plinko
             gm.BallsChanged += RefreshDock;
         }
 
+        // ---------------------------------------------------------------- Tutorial con flechas
+        // Pasos: 0 comprar la primera bola, 1 primera fusión, 2 primera mejora, 3 terminado.
+        RectTransform tutArrow, tutRing;
+        float tutClock;
+
+        void BuildTutorialArrow()
+        {
+            tutRing = UIFactory.Rect("TutRing", root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            var ring = tutRing.gameObject.AddComponent<Image>();
+            ring.sprite = SpriteFactory.UIPanel;
+            ring.type = Image.Type.Sliced;
+            ring.color = new Color(1f, 0.85f, 0.3f, 0.35f);
+            ring.raycastTarget = false;
+
+            tutArrow = UIFactory.Rect("TutArrow", root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            tutArrow.sizeDelta = new Vector2(64, 96);
+            tutArrow.pivot = new Vector2(0.5f, 0f);
+            var img = tutArrow.gameObject.AddComponent<Image>();
+            img.sprite = SpriteFactory.Arrow;
+            img.color = UIFactory.Gold;
+            img.raycastTarget = false;
+            var outline = tutArrow.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(0.2f, 0.1f, 0f, 0.8f);
+            outline.effectDistance = new Vector2(3, -3);
+            tutArrow.gameObject.SetActive(false);
+            tutRing.gameObject.SetActive(false);
+        }
+
+        void UpdateTutorial(float dt)
+        {
+            if (tutArrow == null) return;
+            var st = gm.State;
+            tutClock += dt;
+
+            // avanzar pasos cuando el jugador ya lo ha hecho
+            if (st.tutorialStep == 0 && gm.Inventory.Count > 0) st.tutorialStep = 1;
+            if (st.tutorialStep == 1 && st.maxLevel >= 2) st.tutorialStep = 2;
+            if (st.tutorialStep == 2 && st.upgrades.Exists(e => e.level > 0)) st.tutorialStep = 3;
+
+            RectTransform target = null;
+            if (!prestigeUI.IsOpen)
+            {
+                if (st.tutorialStep == 0 && tutClock > 2f) target = (RectTransform)buyButton.transform;
+                else if (st.tutorialStep == 1 && mergeButton.interactable) target = (RectTransform)mergeButton.transform;
+                else if (st.tutorialStep == 2) target = TutorialUpgradeTarget();
+            }
+
+            bool show = target != null;
+            if (tutArrow.gameObject.activeSelf != show) { tutArrow.gameObject.SetActive(show); tutRing.gameObject.SetActive(show); }
+            if (!show) return;
+            tutArrow.SetAsLastSibling();
+
+            // la flecha baja y sube apuntando al botón; el marco late alrededor
+            float bob = Mathf.Abs(Mathf.Sin(Time.unscaledTime * 5f)) * 22f;
+            tutArrow.position = target.TransformPoint(new Vector3(0, target.rect.yMax + 10f + bob, 0));
+            tutRing.position = target.TransformPoint(target.rect.center);
+            float pulse = 1f + 0.06f * Mathf.Sin(Time.unscaledTime * 6f);
+            tutRing.sizeDelta = (target.rect.size + new Vector2(26, 26)) * pulse * target.lossyScale.x / root.lossyScale.x;
+        }
+
+        /// <summary>Primera mejora que se puede comprar en la pestaña actual; si no hay, la pestaña que tenga alguna.</summary>
+        RectTransform TutorialUpgradeTarget()
+        {
+            foreach (var row in rows)
+                if (row.Go.activeInHierarchy && row.Button.interactable) return (RectTransform)row.Button.transform;
+            foreach (var t in tabs)
+                if (t.Badge.enabled) return (RectTransform)t.Button.transform;
+            return null;
+        }
+
+        readonly List<Image[]> tokenCopies = new List<Image[]>();
+        int lastBuyLevel;
+        Text dockMult;
+        Punch dockMultPunch;
+        int lastCopies;
+
         static readonly Color BuyColor = new Color(0.16f, 0.55f, 0.48f);
         static readonly Color MergeColor = new Color(0.42f, 0.26f, 0.70f);
         Text buyPrice, mergePrice;
         Image buyIconImg, mergeFromA, mergeFromB, mergeTo;
+        Punch buyIconPunch;
 
         /// <summary>
         /// Botón de acción: fondo con volumen y borde claro, icono a la izquierda en un círculo oscuro,
@@ -577,11 +711,27 @@ namespace Plinko
             foreach (var b in inv.Owned) sortedLevels.Add(b.Level);
             sortedLevels.Sort((x, y) => y.CompareTo(x));
             int slots = gm.Stats.MaxBalls;
+            // cuántas bolas extra hay por cada una tuya (Sobrecarga x1.5, Avalancha x5...)
+            float mult = (gm.InOverload || gm.InRush) && inv.Count > 0 ? (float)gm.MaxBallsNow / inv.Count : 1f;
+            int copiesShown = Mathf.Clamp(Mathf.CeilToInt(mult - 0.01f) - 1, 0, 3);
+            if (copiesShown != lastCopies) { lastCopies = copiesShown; if (copiesShown > 0) dockMultPunch.Play(); }
+            dockMult.text = mult > 1.01f ? "x" + (mult < 10 ? mult.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) : Mathf.RoundToInt(mult).ToString()) : "";
             for (int i = 0; i < tokens.Count; i++)
             {
                 var (img, label) = tokens[i];
                 bool visible = i < Mathf.Max(slots, sortedLevels.Count);
                 img.gameObject.SetActive(visible);
+                var copies = tokenCopies[i];
+                for (int j = 0; j < copies.Length; j++)
+                {
+                    bool on = visible && i < sortedLevels.Count && j < copiesShown;
+                    if (copies[j].gameObject.activeSelf != on) copies[j].gameObject.SetActive(on);
+                    if (on)
+                    {
+                        copies[j].sprite = BallMaterials.GetSprite(sortedLevels[i]);
+                        copies[j].color = new Color(1f, 1f, 1f, 0.6f - 0.15f * j);
+                    }
+                }
                 if (!visible) continue;
                 if (i < sortedLevels.Count)
                 {
@@ -600,8 +750,20 @@ namespace Plinko
             double cost = inv.BuyCost;
             bool canBuy = inv.HasFreeSlot && gm.Money >= cost;
             buyButton.interactable = canBuy;
-            buyLabel.text = "COMPRAR  <size=20><color=#BFEFE0>" + inv.Count + "/" + slots + "</color></size>";
-            buyPrice.text = !inv.HasFreeSlot ? "Huecos llenos" : cost <= 0 ? "¡GRATIS!" : NumberFormat.Money(cost);
+            int buyLevel = inv.BuyLevel;
+            buyLabel.text = "COMPRAR  <size=20><color=#BFEFE0>" + (buyLevel > 1 ? Balance.LevelName(buyLevel) + " · " : "") + inv.Count + "/" + slots + "</color></size>";
+            buyIconImg.sprite = BallMaterials.GetSprite(buyLevel);
+            if (buyLevel > lastBuyLevel && lastBuyLevel > 0)
+            {
+                string hex = ColorUtility.ToHtmlStringRGB(Balance.LevelColor(buyLevel));
+                string msg = "¡Ahora compras bolas de <color=#" + hex + ">" + Balance.LevelName(buyLevel) + "</color>!";
+                if (inv.LastRaised > 0) msg += "  <size=26>(" + inv.LastRaised + (inv.LastRaised == 1 ? " bola sube" : " bolas suben") + ")</size>";
+                ShowBanner(msg, Balance.LevelColor(buyLevel));
+                buyIconPunch?.Play(1.4f);
+            }
+            inv.LastRaised = 0;
+            lastBuyLevel = buyLevel;
+            buyPrice.text = NumberFormat.Money(cost);   // sin huecos: precio igualmente, con el botón desactivado
             buyIconImg.color = new Color(1, 1, 1, canBuy ? 1f : 0.5f);
 
             int lv = inv.MergeableLevel();
@@ -609,39 +771,69 @@ namespace Plinko
             bool canMerge = lv > 0 && gm.Money >= mergeCost;
             mergeButton.interactable = canMerge;
             mergeLabel.text = lv > 0 ? "FUSIONAR  <size=20><color=#E2D0FF>→ " + Balance.LevelName(lv + 1) + "</color></size>" : "FUSIONAR";
-            mergePrice.text = lv > 0 ? NumberFormat.Money(mergeCost) : "Sin parejas";
-            int shown = lv > 0 ? lv : 1;
+            // sin parejas: precio de la próxima fusión probable (dos bolas del nivel que se compra),
+            // con el botón desactivado hasta que haya pareja
+            int shown = lv > 0 ? lv : inv.BuyLevel;
+            mergePrice.text = NumberFormat.Money(lv > 0 ? mergeCost : Balance.MergeCost(gm.Stats.TierIndex, shown + 1));
             mergeFromA.sprite = mergeFromB.sprite = BallMaterials.GetSprite(shown);
             mergeTo.sprite = BallMaterials.GetSprite(shown + 1);
             var tint = new Color(1, 1, 1, canMerge ? 1f : 0.45f);
             mergeFromA.color = mergeFromB.color = mergeTo.color = tint;
         }
 
-        void BuildTabs(RectTransform container)
+        void BuildTabs(RectTransform nav)
         {
-            UIFactory.Image(container, UIFactory.CardDarkColor);
+            // fondo de la barra (se prolonga hasta abajo para tapar la zona de gestos) y línea superior
+            var bg = UIFactory.Inset(UIFactory.Stretch("NavBg", nav), 0, -300, 0, 0);
+            UIFactory.Image(bg, new Color(0.06f, 0.065f, 0.13f, 1f), false).raycastTarget = false;
+            var line = UIFactory.Rect("NavLine", nav, new Vector2(0, 1), new Vector2(1, 1));
+            line.sizeDelta = new Vector2(0, 3);
+            UIFactory.Image(line, new Color(UIFactory.PanelBorder.r, UIFactory.PanelBorder.g, UIFactory.PanelBorder.b, 0.5f), false).raycastTarget = false;
+
             var cats = (UpgradeCategory[])System.Enum.GetValues(typeof(UpgradeCategory));
             for (int i = 0; i < cats.Length; i++)
             {
                 var cat = cats[i];
-                var rt = UIFactory.Rect("Tab_" + cat, container, new Vector2((float)i / cats.Length, 0), new Vector2((float)(i + 1) / cats.Length, 1));
-                UIFactory.Inset(rt, 6, 6, 6, 6);
-                var tab = new Tab { Cat = cat };
-                tab.Button = UIFactory.Button(rt, UIFactory.CardDarkColor, out tab.Label, TabName(cat), 26);
-                tab.Punch = Punch.On(rt, 0.08f, 0.2f);
+                var rt = UIFactory.Rect("Tab_" + cat, nav, new Vector2((float)i / cats.Length, 0), new Vector2((float)(i + 1) / cats.Length, 1));
+                var hit = rt.gameObject.AddComponent<Image>();
+                hit.color = new Color(1, 1, 1, 0.001f);   // zona táctil invisible
+                var tab = new Tab { Cat = cat, Button = rt.gameObject.AddComponent<Button>() };
+                tab.Button.targetGraphic = hit;
+                var cb = tab.Button.colors;
+                cb.normalColor = new Color(1, 1, 1, 0.001f);
+                cb.highlightedColor = new Color(1, 1, 1, 0.04f);
+                cb.pressedColor = new Color(1, 1, 1, 0.10f);
+                cb.selectedColor = cb.normalColor;
+                tab.Button.colors = cb;
+
+                // indicador de pestaña activa (rayita arriba)
+                var ind = UIFactory.Rect("Indicator", rt, new Vector2(0.28f, 1f), new Vector2(0.72f, 1f));
+                ind.sizeDelta = new Vector2(0, 6);
+                ind.anchoredPosition = new Vector2(0, -3);
+                tab.Indicator = UIFactory.Image(ind, Color.white);
+                tab.Indicator.raycastTarget = false;
+
+                var iconRt = UIFactory.Rect("Icon", rt, new Vector2(0.5f, 0.62f), new Vector2(0.5f, 0.62f));
+                iconRt.sizeDelta = new Vector2(54, 54);
+                tab.Icon = iconRt.gameObject.AddComponent<Image>();
+                tab.Icon.sprite = NavIcons.Get(cat);
+                tab.Icon.raycastTarget = false;
+
+                tab.Label = UIFactory.Text(UIFactory.Rect("Label", rt, new Vector2(0, 0.04f), new Vector2(1, 0.34f)), TabName(cat), 22, UIFactory.TextDim, TextAnchor.MiddleCenter, true);
+                tab.Punch = Punch.On(iconRt, 0.18f, 0.25f);
                 tab.Button.onClick.AddListener(() => { SelectTab(cat); tab.Punch.Play(); gm.Audio.Click(); });
 
-                var badge = UIFactory.Rect("Badge", rt, new Vector2(1, 1), new Vector2(1, 1));
-                badge.sizeDelta = new Vector2(22, 22);
-                badge.anchoredPosition = new Vector2(-14, -14);
+                var badge = UIFactory.Rect("Badge", iconRt, new Vector2(1, 1), new Vector2(1, 1));
+                badge.sizeDelta = new Vector2(20, 20);
+                badge.anchoredPosition = new Vector2(2, -2);
                 tab.Badge = badge.gameObject.AddComponent<Image>();
                 tab.Badge.sprite = SpriteFactory.Circle;
                 tab.Badge.color = UIFactory.Gold;
                 tab.Badge.raycastTarget = false;
 
-                var lk = Padlock(rt, 30, UIFactory.TextDim);
-                lk.anchorMin = lk.anchorMax = new Vector2(0, 0.5f);
-                lk.anchoredPosition = new Vector2(26, 0);
+                var lk = Padlock(iconRt, 24, UIFactory.TextMain);
+                lk.anchorMin = lk.anchorMax = new Vector2(1, 0);
+                lk.anchoredPosition = new Vector2(2, 6);
                 tab.Lock = lk.gameObject;
                 tabs.Add(tab);
             }
@@ -770,7 +962,7 @@ namespace Plinko
             row.Cost.text = "?";
             row.Cost.color = LockedColor;
             row.Fill.gameObject.SetActive(reqKnown && progress > 0.02f);
-            row.Fill.anchorMax = new Vector2(progress, 1);
+            SetFill(row.Fill, progress);
         }
 
         /// <summary>Desbloqueadas arriba (en orden de catálogo) y bloqueadas al final.</summary>
@@ -778,8 +970,8 @@ namespace Plinko
         {
             orderDirty = false;
             int index = 0;
-            foreach (var row in rows) if (!row.Locked) row.Go.transform.SetSiblingIndex(index++);
-            foreach (var row in rows) if (row.Locked) row.Go.transform.SetSiblingIndex(index++);
+            // orden fijo (el de la definición): desbloquear una mejora no la mueve de sitio
+            foreach (var row in rows) row.Go.transform.SetSiblingIndex(index++);
         }
 
         void BuildBanner()
@@ -849,14 +1041,22 @@ namespace Plinko
         void SelectTab(UpgradeCategory cat)
         {
             currentTab = cat;
-            foreach (var t in tabs)
-            {
-                bool on = t.Cat == cat;
-                UIFactory.SetButtonColor(t.Button, on ? UIFactory.CategoryColor(t.Cat) : UIFactory.CardDarkColor);
-                t.Label.color = on ? UIFactory.TextMain : UIFactory.TextDim;
-            }
+            foreach (var t in tabs) PaintTab(t);
             RefreshRows();
             if (scroll != null) scroll.verticalNormalizedPosition = 1f;
+        }
+
+        /// <summary>Pestaña activa: icono y texto en su color con rayita arriba; el resto en gris (más apagado si está bloqueada).</summary>
+        void PaintTab(Tab t)
+        {
+            bool on = t.Cat == currentTab;
+            bool open = gm.IsTabUnlocked(t.Cat);
+            var c = UIFactory.CategoryColor(t.Cat);
+            var dim = new Color(UIFactory.TextDim.r, UIFactory.TextDim.g, UIFactory.TextDim.b, open ? 0.9f : 0.45f);
+            t.Icon.color = on ? c : dim;
+            t.Label.color = on ? Color.Lerp(c, Color.white, 0.35f) : dim;
+            t.Indicator.enabled = on;
+            t.Indicator.color = c;
         }
 
         void RefreshRows()
@@ -901,7 +1101,7 @@ namespace Plinko
                 row.Button.interactable = canBuy;
                 float progress = max ? 0f : (float)System.Math.Min(1.0, gm.Money / cost);
                 row.Fill.gameObject.SetActive(!canBuy && !max && progress > 0.02f);
-                row.Fill.anchorMax = new Vector2(progress, 1);
+                SetFill(row.Fill, progress);
                 row.Cost.color = canBuy || max ? UIFactory.TextMain : UIFactory.TextDim;
             }
 
@@ -913,9 +1113,7 @@ namespace Plinko
                 bool open = gm.IsTabUnlocked(t.Cat);
                 bool canOpen = gm.IsTabNextToUnlock(t.Cat) && gm.State.cores >= Balance.TabUnlockCost(t.Cat);
                 if (t.Lock.activeSelf == open) t.Lock.SetActive(!open);
-                var lrt = t.Label.rectTransform;
-                lrt.offsetMin = new Vector2(open ? 0 : 34, lrt.offsetMin.y);
-                if (!open && t.Cat != currentTab) t.Label.color = new Color(UIFactory.TextDim.r, UIFactory.TextDim.g, UIFactory.TextDim.b, 0.6f);
+                PaintTab(t);
                 t.Badge.enabled = t.Cat != currentTab && (canOpen || (open && (affordable.Contains(t.Cat) || newUnlocks.Contains(t.Cat))));
             }
             if (unlockCard != null) RefreshUnlockCard(!gm.IsTabUnlocked(currentTab));
@@ -927,6 +1125,12 @@ namespace Plinko
         {
             float dt = Time.unscaledDeltaTime;
             UpdateMoney(dt);
+            // el icono de COMPRAR siempre muestra la bola del nivel que se compra ahora
+            if (buyIconImg != null)
+            {
+                var want = BallMaterials.GetSprite(gm.Inventory.BuyLevel);
+                if (buyIconImg.sprite != want) buyIconImg.sprite = want;
+            }
 
             if (resetConfirm > 0)
             {
@@ -950,6 +1154,7 @@ namespace Plinko
             }
 
             UpdateOverloadBar(dt);
+            UpdateTutorial(dt);
             RefreshPrestigeChip(dt);
             UpdateRush(dt);
             UpdateBanner(dt);
@@ -988,6 +1193,7 @@ namespace Plinko
 
         void LateUpdate()
         {
+            UpdateTags(Time.deltaTime);
             if (bucketsDirty) RebuildBucketLabels();
             var board = gm.Board;
             for (int i = 0; i < bucketLabels.Count; i++)
@@ -1059,6 +1265,133 @@ namespace Plinko
             p.Rt.anchoredPosition = WorldToCanvas(world);
             p.Rt.localScale = Vector3.zero;
             popups.Add(p);
+        }
+
+        static readonly Color TagColor = new Color(1f, 0.86f, 0.35f);
+
+        // ---------------------------------------------------------------- Etiqueta "+$X" por bola
+        // Cada bola lleva una etiqueta pequeña que suma lo que le pagan los pinchos; al caer, se va al cubo.
+
+        public class BallTag
+        {
+            public RectTransform Rt;
+            public Text Text;
+            public Transform Follow;
+            public double Amount;
+            public float Bump, LandT;
+            public bool Landing;
+            public Vector2 Pos, LandTo;
+        }
+
+        readonly List<BallTag> tags = new List<BallTag>();
+        readonly Stack<BallTag> tagPool = new Stack<BallTag>();
+        const int MaxTags = 12;
+        static readonly Vector2 TagOffset = new Vector2(0, 48);
+
+        /// <summary>Suma a la etiqueta de la bola (la crea si no tiene). Devuelve null si no hay sitio.</summary>
+        public BallTag TagAdd(BallTag tag, Transform follow, double amount)
+        {
+            if (tag == null)
+            {
+                if (tags.Count >= MaxTags) return null;
+                if (tagPool.Count > 0) tag = tagPool.Pop();
+                else
+                {
+                    var rt = UIFactory.Rect("BallTag", popupLayer, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+                    rt.sizeDelta = new Vector2(220, 40);
+                    var t = UIFactory.Text(rt, "", 24, TagColor, TextAnchor.MiddleCenter, true);
+                    t.gameObject.AddComponent<Outline>().effectColor = new Color(0.12f, 0.06f, 0f, 0.85f);
+                    tag = new BallTag { Rt = rt, Text = t };
+                }
+                tag.Rt.gameObject.SetActive(true);
+                tag.Rt.SetAsLastSibling();
+                tag.Follow = follow;
+                tag.Amount = 0;
+                tag.Landing = false;
+                tag.Pos = WorldToCanvas(follow.position) + TagOffset;
+                tag.Rt.anchoredPosition = tag.Pos;
+                tags.Add(tag);
+            }
+            tag.Amount += amount;
+            tag.Bump = 1f;
+            tag.Text.text = "+" + NumberFormat.Money(tag.Amount);
+            return tag;
+        }
+
+        /// <summary>Multiplica lo acumulado en la etiqueta (pincho dorado) con un salto más grande.</summary>
+        public void TagMultiply(BallTag tag, double factor)
+        {
+            tag.Amount *= factor;
+            tag.Bump = 1.6f;
+            tag.Text.text = "+" + NumberFormat.Money(tag.Amount);
+        }
+
+        /// <summary>La bola ha caído: la etiqueta vuela hacia el texto del cubo y se funde con él.</summary>
+        public void TagLand(BallTag tag, Vector3 world)
+        {
+            tag.Follow = null;
+            tag.Landing = true;
+            tag.LandT = 0;
+            tag.LandTo = WorldToCanvas(world);
+        }
+
+        /// <summary>La bola desaparece sin caer (fusión, reinicio): la etiqueta se quita sin más.</summary>
+        public void TagDrop(BallTag tag)
+        {
+            int i = tags.IndexOf(tag);
+            if (i >= 0) RemoveTag(i);
+        }
+
+        void RemoveTag(int i)
+        {
+            var tag = tags[i];
+            tag.Rt.gameObject.SetActive(false);
+            tag.Follow = null;
+            tags.RemoveAt(i);
+            tagPool.Push(tag);
+        }
+
+        void UpdateTags(float dt)
+        {
+            for (int i = tags.Count - 1; i >= 0; i--)
+            {
+                var tag = tags[i];
+                var c = tag.Text.color;
+                if (tag.Landing)
+                {
+                    tag.LandT += dt / 0.22f;
+                    if (tag.LandT >= 1f) { RemoveTag(i); continue; }
+                    tag.Pos = Vector2.Lerp(tag.Pos, tag.LandTo, Mathf.Min(1f, dt * 18f));
+                    tag.Rt.localScale = Vector3.one * (1f - 0.5f * tag.LandT);
+                    c.a = 1f - tag.LandT;
+                }
+                else
+                {
+                    if (tag.Follow == null || !tag.Follow.gameObject.activeInHierarchy) { RemoveTag(i); continue; }
+                    tag.Pos = Vector2.Lerp(tag.Pos, WorldToCanvas(tag.Follow.position) + TagOffset, Mathf.Min(1f, dt * 22f));
+                    tag.Bump = Mathf.Max(0f, tag.Bump - dt * 6f);
+                    tag.Rt.localScale = Vector3.one * (1f + 0.35f * tag.Bump * tag.Bump);
+                    c.a = 1f;
+                }
+                tag.Text.color = c;
+                tag.Rt.anchoredPosition = tag.Pos;
+            }
+        }
+
+        /// <summary>
+        /// Barra de progreso dentro de un botón redondeado: un poco metida hacia dentro y nunca más estrecha
+        /// que su alto, para que las esquinas redondeadas no se deformen ni asomen por el borde del botón.
+        /// </summary>
+        static void SetFill(RectTransform fill, float progress)
+        {
+            const float pad = 4f;
+            var parent = (RectTransform)fill.parent;
+            float w = parent.rect.width, h = parent.rect.height - pad * 2f;
+            fill.anchorMin = Vector2.zero;
+            fill.anchorMax = new Vector2(progress, 1);
+            float extra = Mathf.Max(0f, h - (progress * w - pad * 2f));   // hasta llegar a un círculo
+            fill.offsetMin = new Vector2(pad, pad);
+            fill.offsetMax = new Vector2(-pad + extra, -pad);
         }
 
         void UpdatePopups(float dt)

@@ -10,8 +10,8 @@ namespace Plinko
         static readonly CultureInfo CI = CultureInfo.InvariantCulture;
 
         /// <summary>
-        /// Sin decimales: se muestran entre 2 y 4 cifras enteras con sufijo.
-        /// 950 → "950", 1.234 → "1234", 12.345 → "12K", 1.500.000 → "1500K", 66.300 Qa → "66Qa".
+        /// Con sufijo y como mucho un decimal (solo por debajo de 10).
+        /// 950 → "950", 1.234 → "1234", 12.345 → "12K", 1.500.000 → "1.5M", 66.300 Qa → "66Qa".
         /// </summary>
         public static string Format(double v)
         {
@@ -22,10 +22,9 @@ namespace Plinko
 
             int tier = (int)Math.Floor(Math.Log10(v) / 3.0);
             double scaled = v / Math.Pow(1000, tier);
-            if (scaled < 10) { tier--; scaled *= 1000; }   // 1.5M -> 1500K: cuatro cifras en vez de decimales
-            scaled = Math.Floor(scaled);
-            if (scaled >= 10000) { tier++; scaled = Math.Floor(scaled / 1000); }
-            return scaled.ToString("0", CI) + Suffix(tier);
+            // por debajo de 10 se deja un decimal (1.5M, 2M); a partir de 10, entero (12M, 150M)
+            if (scaled < 10) return (Math.Floor(scaled * 10) / 10).ToString("0.#", CI) + Suffix(tier);
+            return Math.Floor(scaled).ToString("0", CI) + Suffix(tier);
         }
 
         static string Suffix(int tier)

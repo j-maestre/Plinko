@@ -31,6 +31,8 @@ namespace Plinko
             waiting.Clear();
             if (levels == null) return;
             foreach (var l in levels) Add(new OwnedBall { Level = l < 1 ? 1 : l });
+            foreach (var b in owned) { if (b.Level > gm.State.maxLevel) gm.State.maxLevel = b.Level; if (b.Level > gm.State.runMaxLevel) gm.State.runMaxLevel = b.Level; }
+            RaiseToBuyLevel();   // partidas guardadas con bolas por debajo del tramo actual
         }
 
         void Add(OwnedBall b)
@@ -75,7 +77,9 @@ namespace Plinko
 
         // --- Comprar ---
 
-        public double BuyCost => Balance.BallCost(gm.State.ballsBought);
+        /// <summary>Nivel de las bolas que se compran ahora mismo.</summary>
+        public int BuyLevel => Balance.BuyLevel(gm.State.runMaxLevel);
+        public double BuyCost => Balance.BallCost(gm.State.ballsBought, BuyLevel);
         public bool HasFreeSlot => owned.Count < gm.Stats.MaxBalls;
 
         public bool TryBuy()
@@ -83,7 +87,10 @@ namespace Plinko
             if (!HasFreeSlot || gm.State.money < BuyCost) return false;
             gm.State.money -= BuyCost;
             gm.State.ballsBought++;
-            Add(new OwnedBall { Level = 1 });
+            int level = BuyLevel;
+            Add(new OwnedBall { Level = level });
+            if (gm.State.maxLevel < level) gm.State.maxLevel = level;
+            if (gm.State.runMaxLevel < level) gm.State.runMaxLevel = level;
             SaveTo(gm.State);
             return true;
         }
@@ -137,8 +144,23 @@ namespace Plinko
             waiting.Remove(consumed);
             waiting.Remove(result);
             result.Level++;
+            if (result.Level > gm.State.maxLevel) gm.State.maxLevel = result.Level;
+            if (result.Level > gm.State.runMaxLevel) gm.State.runMaxLevel = result.Level;
+            LastRaised += RaiseToBuyLevel();
             SaveTo(gm.State);
             return true;
+        }
+
+        /// <summary>Bolas subidas automáticamente en la última subida de tramo (para el aviso; la UI lo pone a 0).</summary>
+        public int LastRaised;
+
+        /// <summary>Las bolas por debajo del nivel de compra suben a ese nivel. Devuelve cuántas han subido.</summary>
+        int RaiseToBuyLevel()
+        {
+            int min = BuyLevel, n = 0;
+            foreach (var b in owned)
+                if (b.Level < min) { b.Level = min; n++; }
+            return n;
         }
     }
 }

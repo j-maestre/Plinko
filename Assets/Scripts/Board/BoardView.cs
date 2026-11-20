@@ -25,12 +25,15 @@ namespace Plinko
         /// Hueco superior por la barra de estado / notch (fracción de pantalla), más un pequeño margen.
         /// En el editor la zona segura es toda la pantalla, así que solo queda el margen.
         /// </summary>
+        /// <summary>Hueco inferior por la barra de gestos del sistema (fracción de pantalla).</summary>
+        public static float SafeBottom => Mathf.Clamp01(Screen.safeArea.yMin / Mathf.Max(1f, Screen.height));
+
         public static float SafeTop => Mathf.Clamp01((Screen.height - Screen.safeArea.yMax) / Mathf.Max(1f, Screen.height)) + 0.01f;
 
         /// <summary>Borde superior utilizable (1 = arriba del todo).</summary>
         public static float TopEdge => 1f - SafeTop;
         public const float OverloadBar = 0.035f;   // barra de Sobrecarga bajo la barra superior
-        public const float BottomUI = 0.44f;
+        public const float BottomUI = 0.37f;
 
 
         static readonly Color PegColor = new Color(0.55f, 0.60f, 0.80f);   // apagado en reposo para que el golpe se note
@@ -47,6 +50,9 @@ namespace Plinko
         public int BucketCount => Rows + 1;
 
         SpriteRenderer[] pegs;
+        SpriteRenderer[] pegHalos;
+        int[] pegStageShown;   // estilo que muestra cada pincho (cambia fila a fila al mejorar)
+        int pegStage;          // estilo actual según "Pinchos reforzados"
         PegType[] pegTypes;
         float[] pegFlash;
         float[] pegCharge;
@@ -113,14 +119,21 @@ namespace Plinko
             charged.Clear();
             pegFlashColor = new Color[count];
             pegBasePos = new Vector2[count];
+            pegHalos = new SpriteRenderer[count];
+            pegStageShown = new int[count];
             for (int r = 0; r < rows; r++)
             for (int k = 0; k <= r; k++)
             {
-                var sr = NewSprite("Peg", SpriteFactory.Sphere, pegRoot, 0);
+                int i = PegIndex(r, k);
+                var sr = NewSprite("Peg", PegStyles.Sprite(pegStage), pegRoot, 0);
                 sr.transform.localPosition = PegPos(r, k);
-                sr.transform.localScale = Vector3.one * PegRadius * 2f;
-                pegs[PegIndex(r, k)] = sr;
-                pegBasePos[PegIndex(r, k)] = PegPos(r, k);
+                pegs[i] = sr;
+                pegBasePos[i] = PegPos(r, k);
+                var halo = NewSprite("Halo", SpriteFactory.Glow, sr.transform, -1);
+                halo.transform.localScale = Vector3.one * 2.6f;
+                pegHalos[i] = halo;
+                pegStageShown[i] = pegStage;
+                sr.transform.localScale = Vector3.one * PegSizeOf(i);
             }
             AssignPegTypes(golden, clone);
 
@@ -161,10 +174,58 @@ namespace Plinko
             for (int i = 0; i < golden && c < candidates.Count; i++) pegTypes[candidates[c++]] = PegType.Golden;
             for (int i = 0; i < clone && c < candidates.Count; i++) pegTypes[candidates[c++]] = PegType.Clone;
 
-            for (int i = 0; i < pegs.Length; i++) pegs[i].color = BaseColor(pegTypes[i]);
+            for (int i = 0; i < pegs.Length; i++) ApplyPegLook(i);
         }
 
-        static Color BaseColor(PegType t) => t == PegType.Golden ? GoldenColor : t == PegType.Clone ? CloneColor : PegColor;
+        Color BaseColor(int i)
+        {
+            var t = pegTypes[i];
+            return t == PegType.Golden ? GoldenColor : t == PegType.Clone ? CloneColor : PegStyles.Color(pegStageShown[i]);
+        }
+
+        float PegSizeOf(int i) => PegRadius * 2f * PegStyles.SizeMul(pegStageShown[i]);
+
+        void ApplyPegLook(int i)
+        {
+            int st = pegStageShown[i];
+            pegs[i].sprite = PegStyles.Sprite(st);
+            pegs[i].color = BaseColor(i);
+            pegs[i].transform.localScale = Vector3.one * PegSizeOf(i);
+            float a = PegStyles.HaloAlpha(st);
+            pegHalos[i].enabled = a > 0;
+            var c = BaseColor(i);
+            pegHalos[i].color = new Color(c.r, c.g, c.b, a);
+        }
+
+        /// <summary>
+        /// Cambia el material de los pinchos. Con animación, una ola baja fila a fila cambiando cada pincho.
+        /// Devuelve true si el material ha cambiado.
+        /// </summary>
+        public bool SetPegStage(int stage, bool animate)
+        {
+            bool changed = stage != pegStage;
+            pegStage = stage;
+            if (pegs == null) return changed;
+            StopAllCoroutines();
+            if (animate) StartCoroutine(PegWave());
+            else for (int i = 0; i < pegs.Length; i++) { pegStageShown[i] = stage; ApplyPegLook(i); }
+            return changed;
+        }
+
+        System.Collections.IEnumerator PegWave()
+        {
+            for (int r = 0; r < Rows; r++)
+            {
+                for (int k = 0; k <= r; k++)
+                {
+                    int i = PegIndex(r, k);
+                    pegStageShown[i] = pegStage;
+                    ApplyPegLook(i);
+                    FlashPeg(r, k, Color.white);
+                }
+                yield return new WaitForSeconds(0.04f);
+            }
+        }
 
         SpriteRenderer NewSprite(string name, Sprite sprite, Transform parent, int order)
         {
@@ -289,8 +350,8 @@ namespace Plinko
                 int i = activeFlash[n];
                 pegFlash[i] = Mathf.Max(0, pegFlash[i] - dt * 5f);
                 float f = pegFlash[i];
-                pegs[i].color = Color.Lerp(BaseColor(pegTypes[i]), pegFlashColor[i], f);
-                pegs[i].transform.localScale = Vector3.one * PegRadius * 2f * (1f + 0.6f * f);
+                pegs[i].color = Color.Lerp(BaseColor(i), pegFlashColor[i], f);
+                pegs[i].transform.localScale = Vector3.one * PegSizeOf(i) * (1f + 0.6f * f);
                 // el pincho "cede" hacia abajo con el golpe y vuelve con un pequeño rebote elástico
                 float wobble = Mathf.Sin((1f - f) * Mathf.PI * 2f) * f;
                 pegs[i].transform.localPosition = PegPosFromIndex(i) + Vector2.down * 0.06f * wobble;
@@ -305,14 +366,14 @@ namespace Plinko
                 if (pegCharge[i] <= 0)
                 {
                     charged.RemoveAt(n);
-                    pegs[i].color = BaseColor(pegTypes[i]);
-                    pegs[i].transform.localScale = Vector3.one * PegRadius * 2f;
+                    pegs[i].color = BaseColor(i);
+                    pegs[i].transform.localScale = Vector3.one * PegSizeOf(i);
                     continue;
                 }
                 float flicker = 0.6f + 0.4f * Mathf.Sin(Time.time * 25f + i);
-                pegs[i].color = Color.Lerp(BaseColor(pegTypes[i]), ChargeColor, flicker);
+                pegs[i].color = Color.Lerp(BaseColor(i), ChargeColor, flicker);
                 float fade = Mathf.Clamp01(pegCharge[i] / 0.5f); // se apaga al final
-                pegs[i].transform.localScale = Vector3.one * PegRadius * 2f * (1f + 0.45f * fade + 0.08f * flicker);
+                pegs[i].transform.localScale = Vector3.one * PegSizeOf(i) * (1f + 0.45f * fade + 0.08f * flicker);
             }
 
             for (int i = 0; i < buckets.Length; i++)

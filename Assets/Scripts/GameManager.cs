@@ -40,6 +40,8 @@ namespace Plinko
         public bool InRush { get; private set; }
         /// <summary>Toca avalancha: la siguiente bola que caiga en un cubo la provoca.</summary>
         public bool RushPending { get; private set; }
+        /// <summary>Multiplicador de valor de las bolas durante la Avalancha (el del cubo donde cayó la bola brillante).</summary>
+        public double RushMultiplier { get; private set; } = 1;
         public AvalancheIntro Intro { get; private set; }
         float pendingTime;
         public float RushTimeLeft { get; private set; }
@@ -115,6 +117,7 @@ namespace Plinko
 
             Board = new GameObject("Board").AddComponent<BoardView>();
             Board.transform.SetParent(transform, false);
+            Board.SetPegStage(PegStyles.StageFor(GetLevel(UpgradeIds.PegFlat)), false);
             Board.Build(Stats.Rows, Stats.GoldenPegs, Stats.ClonePegs);
 
             Fx = new GameObject("Fx").AddComponent<FxSystem>();
@@ -152,6 +155,8 @@ namespace Plinko
             income.Tick(dt);
             UpdateOverload(dt);
             UpdateRush(dt);
+            // nunca quedarse atascado: sin bolas, siempre hay dinero para comprar la siguiente
+            if (Inventory.Count == 0 && State.money < Inventory.BuyCost) { State.money = Inventory.BuyCost; MoneyChanged?.Invoke(); }
 
             // Goteo: las bolas del jugador caen solas, una detrás de otra
             float interval = LaunchInterval;
@@ -176,7 +181,7 @@ namespace Plinko
             {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 if (kb.mKey.wasPressedThisFrame) DebugAddMoney();
-                if (kb.eKey.wasPressedThisFrame && !InRush) TriggerRushAt(UnityEngine.Random.Range(0, Board.BucketCount));
+                if (kb.eKey.wasPressedThisFrame && !InRush && !RushPending && !Intro.Playing) BeginRushBall();
 #endif
             }
 #endif
@@ -231,37 +236,106 @@ namespace Plinko
         }
 
         /// <summary>
-        /// Las dos bolas vuelan como chispas hacia arriba, se juntan con un destello
-        /// y la nueva cae desde allí con su nombre.
+        /// Fusión en el centro de la pantalla: aparecen las dos bolas, giran en espiral una hacia la otra,
+        /// chocan con un destello, sale la nueva bola grande con su nombre y sube a lo alto del tablero para caer.
         /// </summary>
         System.Collections.IEnumerator MergeSequence(OwnedBall result, Vector2? fromA, Vector2? fromB)
         {
+            int oldLevel = result.Level - 1, newLevel = result.Level;
+            var oldColor = Balance.LevelColor(oldLevel);
+            var newColor = Balance.LevelColor(newLevel);
             Vector2 spawn = Board.SpawnPos;
-            var oldColor = Balance.LevelColor(result.Level - 1);
-            var newColor = Balance.LevelColor(result.Level);
-            Vector2 a = fromA ?? spawn + new Vector2(-1.6f, -1.2f);   // si no estaban cayendo, salen de los lados
-            Vector2 b = fromB ?? spawn + new Vector2(1.6f, -1.2f);
-            const float travel = 0.45f;
-            Fx.Converge(a, spawn, oldColor, 16, travel);
-            Fx.Converge(b, spawn, oldColor, 16, travel);
-            Audio.Special(0.8f);
+            Vector2 center = Vector2.Lerp(spawn, Board.BucketCenterPos(Board.Rows / 2), 0.45f);
+            const float big = 1.1f;            // tamaño de las bolas en la animación (en unidades)
+            float normal = BoardView.BallRadius * 2f * Mathf.Min(1.6f, 1f + 0.07f * (newLevel - 1));
 
-            for (float t = 0; t < travel; t += Time.unscaledDeltaTime)
+            var a = MergeSprite(oldLevel);
+            var b = MergeSprite(oldLevel);
+            Audio.Special(0.7f);
+
+            // 1) aparecen a los lados del centro
+            for (float t = 0; t < 0.35f; t += Time.unscaledDeltaTime)
             {
-                if (t > travel * 0.5f) Fx.Flash(spawn, new Color(newColor.r, newColor.g, newColor.b, 0.15f), 0.6f + t * 2f, 0.08f);
+                float s = EaseOutBack(t / 0.35f) * big;
+                a.transform.position = center + Vector2.left * 1.6f;
+                b.transform.position = center + Vector2.right * 1.6f;
+                a.transform.localScale = b.transform.localScale = Vector3.one * s;
                 yield return null;
             }
 
-            // ¡Fusión!
-            Fx.Flash(spawn, new Color(1, 1, 1, 0.9f), 2.6f, 0.3f);
-            Fx.Ring(spawn, newColor, 3f, 0.5f);
-            Fx.Ring(spawn, Color.white, 1.6f, 0.3f);
-            Fx.Burst(spawn, newColor, 34, 7f, 0.1f, 0.8f, -3f);
-            Board.Shake(0.3f);
-            Background.Pulse(newColor, 0.6f);
+            // 2) espiral cada vez más rápida hacia el centro
+            const float spin = 0.75f;
+            float soundTimer = 0;
+            for (float t = 0; t < spin; t += Time.unscaledDeltaTime)
+            {
+                float k = t / spin, e = k * k;
+                float radius = Mathf.Lerp(1.6f, 0f, e);
+                float ang = Mathf.PI + e * Mathf.PI * 3f;
+                var off = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang) * 0.6f) * radius;
+                a.transform.position = center + off;
+                b.transform.position = center - off;
+                a.transform.Rotate(0, 0, -900f * Time.unscaledDeltaTime * (0.3f + k));
+                b.transform.Rotate(0, 0, -900f * Time.unscaledDeltaTime * (0.3f + k));
+                if (UnityEngine.Random.value < 0.6f)
+                {
+                    Fx.Burst(a.transform.position, oldColor, 1, 0.8f, 0.07f, 0.35f, 0f);
+                    Fx.Burst(b.transform.position, oldColor, 1, 0.8f, 0.07f, 0.35f, 0f);
+                }
+                soundTimer -= Time.unscaledDeltaTime;
+                if (soundTimer <= 0) { soundTimer = Mathf.Lerp(0.18f, 0.05f, k); Audio.Zap(0.7f + k); }
+                yield return null;
+            }
+            Destroy(a.gameObject);
+            Destroy(b.gameObject);
+
+            // 3) ¡choque!
+            Fx.Flash(center, new Color(1, 1, 1, 0.95f), 3.2f, 0.35f);
+            Fx.Ring(center, newColor, 3.4f, 0.55f);
+            Fx.Ring(center, Color.white, 1.8f, 0.3f);
+            Fx.Burst(center, newColor, 40, 8f, 0.11f, 0.9f, -3f);
+            Board.Shake(0.35f);
+            Background.Pulse(newColor, 0.7f);
             Audio.Record();
-            UI.Popup(spawn + Vector2.up * 0.7f, "¡" + Balance.LevelName(result.Level) + "!", newColor, 1.15f);
+            UI.Popup(center + Vector2.up * 1.1f, "¡" + Balance.LevelName(newLevel) + "!", newColor, 1.3f);
+
+            // 4) la nueva bola aparece grande y late un momento
+            var n = MergeSprite(newLevel);
+            n.transform.position = center;
+            for (float t = 0; t < 0.6f; t += Time.unscaledDeltaTime)
+            {
+                float s = EaseOutBack(Mathf.Clamp01(t / 0.25f)) * big * 1.25f * (1f + 0.05f * Mathf.Sin(t * 20f));
+                n.transform.localScale = Vector3.one * s;
+                yield return null;
+            }
+
+            // 5) sube a lo alto del tablero encogiendo hasta su tamaño y cae
+            Vector2 from = center;
+            for (float t = 0; t < 0.35f; t += Time.unscaledDeltaTime)
+            {
+                float k = t / 0.35f, e = k * k;
+                n.transform.position = Vector2.Lerp(from, spawn, e);
+                n.transform.localScale = Vector3.one * Mathf.Lerp(big * 1.25f, normal, e);
+                yield return null;
+            }
+            Destroy(n.gameObject);
             Balls.Launch(result, true);
+        }
+
+        SpriteRenderer MergeSprite(int level)
+        {
+            var go = new GameObject("MergeBall");
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = BallMaterials.GetSprite(level);
+            sr.sortingOrder = 25;
+            go.transform.localScale = Vector3.zero;
+            return sr;
+        }
+
+        static float EaseOutBack(float t)
+        {
+            const float c = 1.70158f;
+            float x = Mathf.Clamp01(t) - 1f;
+            return 1f + (c + 1f) * x * x * x + c * x * x;
         }
 
         // --- Economía ---
@@ -314,29 +388,38 @@ namespace Plinko
                 if (rushTimer <= 0) rushTimer = UnityEngine.Random.Range(Balance.RushMinDelay, Balance.RushMaxDelay) * Stats.RushDelayFactor;
                 if (RushPending || Intro.Playing)
                 {
-                    // si no cae ninguna bola en un rato, se dispara igualmente en el cubo central
-                    pendingTime += dt;
-                    if (!Intro.Playing && pendingTime > 20f) TriggerRushAt(Board.Rows / 2);
+                    // si la bola brillante desaparece (p. ej. al ampliar el tablero), se lanza otra
+                    if (RushPending && !Intro.Playing && !Balls.RushBallActive) Balls.LaunchRushBall();
                     return;
                 }
                 rushTimer -= dt;
-                if (rushTimer <= 0) { RushPending = true; pendingTime = 0; }
+                if (rushTimer <= 0) BeginRushBall();
                 return;
             }
             RushTimeLeft -= dt;
             if (RushTimeLeft <= 0)
             {
                 InRush = false;
+                RushMultiplier = 1;
                 rushTimer = UnityEngine.Random.Range(Balance.RushMinDelay, Balance.RushMaxDelay) * Stats.RushDelayFactor;
                 RushEnded?.Invoke();
             }
         }
 
-        /// <summary>Una bola ha caído en este cubo con la avalancha pendiente: empieza la cinemática.</summary>
-        public void TriggerRushAt(int bucket)
+        /// <summary>Toca avalancha: cae la bola brillante que decidirá el multiplicador.</summary>
+        void BeginRushBall()
+        {
+            RushPending = true;
+            pendingTime = 0;
+            Balls.LaunchRushBall();
+        }
+
+        /// <summary>La bola brillante ha caído en este cubo: empieza la cinemática y la Avalancha con ese multiplicador.</summary>
+        public void TriggerRushAt(int bucket, double multiplier = 1)
         {
             if (InRush || Intro.Playing) return;
             RushPending = false;
+            RushMultiplier = multiplier;
             Intro.Play(bucket, () =>
             {
                 StartRush();
@@ -394,7 +477,7 @@ namespace Plinko
             if (State.cores < cost) return false;   // se paga con lingotes de oro
             State.cores -= cost;
             State.unlockedTabs.Add(c.ToString());
-            Stats.Recalculate();                     // los lingotes sin gastar dan bonus
+            Stats.Recalculate();                     // (recalcula tras gastar lingotes)
             Audio.Record();
             Save();
             TabUnlocked?.Invoke(c);
@@ -424,11 +507,26 @@ namespace Plinko
             if (Stats.Rows != oldRows)
             {
                 Balls.ClearAll();
-                Board.Build(Stats.Rows, Stats.GoldenPegs, Stats.ClonePegs);
+                Board.SetPegStage(PegStyles.StageFor(GetLevel(UpgradeIds.PegFlat)), false);
+            Board.Build(Stats.Rows, Stats.GoldenPegs, Stats.ClonePegs);
             }
             else if (def.Id == UpgradeIds.GoldenPegs || def.Id == UpgradeIds.ClonePegs)
             {
                 Board.AssignPegTypes(Stats.GoldenPegs, Stats.ClonePegs);
+            }
+
+            if (def.Id == UpgradeIds.PegFlat)
+            {
+                // cada mejora recorre los pinchos con una ola; al cambiar de material, además, se anuncia
+                int stage = PegStyles.StageFor(lvl + 1);
+                if (Board.SetPegStage(stage, true))
+                {
+                    var c = PegStyles.Color(stage);
+                    UI.Popup(Board.PegWorldPos(Stats.Rows / 2, Stats.Rows / 4), "¡Pinchos de " + PegStyles.Name(stage) + "!", c, 1.2f);
+                    Background.Pulse(c, 0.6f);
+                    Board.Shake(0.25f);
+                    Audio.Special(1.2f);
+                }
             }
 
             int groupIndex = System.Array.IndexOf(UpgradeIds.BucketGroups, def.Id);
@@ -499,20 +597,22 @@ namespace Plinko
             levels.Clear();
             State.balls = new System.Collections.Generic.List<int>();
             State.ballsBought = 0;
+            State.runMaxLevel = 0;
 
             // ventajas de inicio compradas en la tienda
             int startAuto = PrestigeBalance.StartAuto(GetPrestigeLevel(PrestigeIds.StartAuto));
             if (startAuto > 0) SetLevel(UpgradeIds.AutoLauncher, startAuto);
-            State.money = PrestigeBalance.StartMoney(GetPrestigeLevel(PrestigeIds.StartMoney));
+            State.money = Balance.FirstBallCost + PrestigeBalance.StartMoney(GetPrestigeLevel(PrestigeIds.StartMoney)); // siempre alcanza para la primera bola
 
             if (InOverload) { InOverload = false; OverloadEnded?.Invoke(); }
-            if (InRush) { InRush = false; RushEnded?.Invoke(); }
+            if (InRush) { InRush = false; RushMultiplier = 1; RushEnded?.Invoke(); }
             RushPending = false;
             rushTimer = 0;
             autoTimer = 0;
             Stats.Recalculate();
             Balls.ClearAll();
             Inventory.Load(State.balls);
+            Board.SetPegStage(PegStyles.StageFor(GetLevel(UpgradeIds.PegFlat)), false);
             Board.Build(Stats.Rows, Stats.GoldenPegs, Stats.ClonePegs);
             Save();
             ProgressReset?.Invoke();
@@ -533,10 +633,11 @@ namespace Plinko
             Balls.ClearAll();
             Inventory.Load(State.balls);
             BallsChanged?.Invoke();
+            Board.SetPegStage(PegStyles.StageFor(GetLevel(UpgradeIds.PegFlat)), false);
             Board.Build(Stats.Rows, Stats.GoldenPegs, Stats.ClonePegs);
             autoTimer = 0;
             if (InOverload) { InOverload = false; OverloadEnded?.Invoke(); }
-            if (InRush) { InRush = false; RushEnded?.Invoke(); }
+            if (InRush) { InRush = false; RushMultiplier = 1; RushEnded?.Invoke(); }
             rushTimer = 0;
             ProgressReset?.Invoke();
             MoneyChanged?.Invoke();

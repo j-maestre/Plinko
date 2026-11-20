@@ -8,7 +8,7 @@ namespace Plinko
         readonly GameManager gm;
 
         public int Rows, MaxBalls, TierIndex, GoldenPegs, ClonePegs;
-        public float AutoInterval;
+        public float AutoInterval, FallSpeed;
         public double PegFlat, PegPercent, BonusChance, BonusAmount, CritChance, GoldenBallChance;
         public double LightningChance, ChargeChance, EchoChance, DriftChance;
         public int LightningHops, MaxChargedPegs;
@@ -30,9 +30,12 @@ namespace Plinko
             int tier = Math.Min(gm.GetPrestigeLevel(PrestigeIds.BallTier), Balance.Tiers.Length - 1); // premio de prestigio
             MaxBalls = Balance.MaxBalls(gm.GetLevel(UpgradeIds.Capacity));     // huecos para bolas
             TierIndex = tier;
-            GoldenPegs = 2 * gm.GetLevel(UpgradeIds.GoldenPegs);
+            GoldenPegs = gm.GetLevel(UpgradeIds.GoldenPegs);   // un pincho dorado por nivel
             ClonePegs = gm.GetLevel(UpgradeIds.ClonePegs);
-            AutoInterval = Balance.AutoInterval(gm.GetLevel(UpgradeIds.AutoLauncher)); // goteo
+            // Caída rápida (usa el id antiguo del Goteo para conservar los niveles guardados);
+            // el goteo base se acelera a la par para que las bolas no esperen
+            FallSpeed = Balance.FallSpeed(gm.GetLevel(UpgradeIds.AutoLauncher));
+            AutoInterval = Balance.AutoInterval(0) / FallSpeed;
             PegFlat = 0;
             PegPercent = Balance.BasePegPercent + Balance.PegPercentBonus(gm.GetLevel(UpgradeIds.PegFlat));
             BonusChance = Balance.BonusChance(gm.GetLevel(UpgradeIds.BonusChance));
@@ -52,7 +55,7 @@ namespace Plinko
 
             // Prestigio
             GlobalMultiplier = PrestigeBalance.Multiplier(gm.GetPrestigeLevel(PrestigeIds.Multiplier))
-                               * (1.0 + PrestigeBalance.UnspentCoreBonus * gm.State.cores);
+                               * PrestigeBalance.PrestigeIncome(gm.State.prestigeCount);
             RushDuration = PrestigeBalance.RushDuration(gm.GetPrestigeLevel(PrestigeIds.RushDuration));
             RushDelayFactor = PrestigeBalance.RushDelayFactor(gm.GetPrestigeLevel(PrestigeIds.RushFrequency));
             GoldenBallMultiplier = PrestigeBalance.GoldenBallMultiplier(gm.GetPrestigeLevel(PrestigeIds.GoldenBall));

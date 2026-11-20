@@ -5,7 +5,7 @@ namespace Plinko
 {
     /// <summary>
     /// Material de cada nivel de bola: nombre, color para efectos y textura generada por código
-    /// (madera con vetas, metales con reflejo de entorno, gemas facetadas, obsidiana, estelar).
+    /// (madera con vetas, metales cepillados de un solo color, gemas facetadas, obsidiana, estelar).
     /// </summary>
     public static class BallMaterials
     {
@@ -23,7 +23,8 @@ namespace Plinko
             new Mat("Bronce",    Kind.Metal,  new Color(0.85f, 0.52f, 0.28f), 0.15f),
             new Mat("Plata",     Kind.Metal,  new Color(0.86f, 0.89f, 0.94f), 0.05f),
             new Mat("Hierro",    Kind.Metal,  new Color(0.52f, 0.54f, 0.58f), 0.55f),
-            new Mat("Diamante",  Kind.Gem,    new Color(0.85f, 0.96f, 1.00f)),
+            new Mat("Oro",       Kind.Metal,  new Color(1.00f, 0.78f, 0.22f), 0.05f),
+            new Mat("Diamante",  Kind.Gem,    new Color(0.45f, 0.85f, 1.00f)),   // azul hielo (el zafiro es azul oscuro)
             new Mat("Platino",   Kind.Metal,  new Color(0.93f, 0.92f, 0.86f), 0.0f),
             new Mat("Zafiro",    Kind.Gem,    new Color(0.20f, 0.38f, 1.00f)),
             new Mat("Esmeralda", Kind.Gem,    new Color(0.12f, 0.82f, 0.42f)),
@@ -93,14 +94,12 @@ namespace Plinko
                     }
                     case Kind.Metal:
                     {
-                        // reflejo de entorno: cielo claro arriba, horizonte marcado, suelo oscuro
-                        var refl = Vector3.Reflect(new Vector3(0, 0, -1), n);
-                        float env = refl.y > 0 ? Mathf.Lerp(0.75f, 1.05f, refl.y) : Mathf.Lerp(0.35f, 0.15f, -refl.y);
-                        float horizon = Mathf.Exp(-Mathf.Pow(refl.y / 0.06f, 2f)) * 0.35f;
-                        float noise = m.Roughness > 0 ? ((float)rng.NextDouble() - 0.5f) * m.Roughness * 0.25f : 0f;
-                        float shade = Mathf.Lerp(env, 0.3f + 0.7f * diffuse, m.Roughness) + noise;
-                        float sp = spec * (1.2f - m.Roughness);
-                        c = m.Color * shade + Color.white * (sp * 0.9f + horizon * (1f - m.Roughness)) - new Color(0.2f, 0.2f, 0.2f, 0) * rim;
+                        // metal cepillado: mismo color en toda la bola, vetas horizontales finas y brillo metálico
+                        float brushed = (Hash(y * 7 + seed * 131) - 0.5f) * 0.10f + (Hash(x * 3 + y * 977 + seed) - 0.5f) * 0.05f * (0.5f + m.Roughness);
+                        float shade = 0.62f + 0.45f * diffuse + brushed;
+                        float sp = spec * (1.0f - m.Roughness * 0.6f);
+                        float sheen = Mathf.Pow(Mathf.Max(0, Vector3.Dot(Vector3.Reflect(-Light, n), Vector3.forward)), 6f) * 0.25f * (1f - m.Roughness);
+                        c = m.Color * shade + Color.Lerp(m.Color, Color.white, 0.6f) * (sp * 0.85f + sheen) - new Color(0.18f, 0.18f, 0.18f, 0) * rim;
                         break;
                     }
                     case Kind.Gem:
@@ -111,12 +110,12 @@ namespace Plinko
                         int sector = Mathf.FloorToInt(ang / (Mathf.PI * 2f) * 8f) % 8;
                         int ringIdx = dist < 0.38f ? 0 : dist < 0.72f ? 1 : 2;
                         int facet = ringIdx == 0 ? 0 : 1 + sector + ringIdx * 8;
-                        float fb = 0.55f + 0.5f * Hash(facet * 31 + seed);
+                        float fb = 0.82f + 0.22f * Hash(facet * 31 + seed);   // facetas suaves: la gema conserva su color
                         if (ringIdx == 0) fb = 1.05f;
                         float sectorEdge = Mathf.Abs(Mathf.Repeat(ang / (Mathf.PI * 2f) * 8f, 1f) - 0.5f) * 2f; // 1 en el borde
                         float lines = (ringIdx > 0 ? Mathf.SmoothStep(0.88f, 1f, sectorEdge) : 0f)
                                       + Mathf.Exp(-Mathf.Pow((dist - 0.38f) / 0.02f, 2)) + Mathf.Exp(-Mathf.Pow((dist - 0.72f) / 0.02f, 2));
-                        c = m.Color * fb * (0.6f + 0.5f * diffuse) + Color.white * (lines * 0.35f + spec * 1.1f)
+                        c = m.Color * fb * (0.62f + 0.45f * diffuse) + Color.Lerp(m.Color, Color.white, 0.7f) * (lines * 0.14f) + Color.white * spec * 0.9f
                             - new Color(0.15f, 0.15f, 0.15f, 0) * rim;
                         break;
                     }

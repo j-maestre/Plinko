@@ -48,12 +48,27 @@ namespace Plinko
         /// <summary>Goteo: segundos entre bola y bola. Rápido desde el principio; la mejora lo acelera más.</summary>
         public static float AutoInterval(int lvl) => Mathf.Max(0.12f, 0.6f * Mathf.Pow(0.85f, lvl));
 
+        /// <summary>Caída rápida: +6% de velocidad de caída por nivel, con tope x2.</summary>
+        public const float MaxFallSpeed = 2f;
+        public static float FallSpeed(int lvl) => Mathf.Min(MaxFallSpeed, 1f + 0.06f * lvl);
+
         // --- Bolas con nivel (fusión) ---
-        public const double MergeMultiplier = 2.3;   // dos bolas iguales -> una que vale un poco más que las dos juntas
+        public const double MergeMultiplier = 2.6;   // dos bolas iguales -> una que vale un poco más que las dos juntas
         public static double BallValue(int tier, int level) => Tiers[tier].Value * Math.Pow(MergeMultiplier, level - 1);
-        public static double BallCost(int bought) => bought == 0 ? 0 : 20 * Math.Pow(1.25, bought - 1); // la primera, gratis
-        /// <summary>Fusionar cuesta caro: 20 veces lo que vale la bola resultante en cada caída.</summary>
-        public static double MergeCost(int tier, int newLevel) => 20 * BallValue(tier, newLevel);
+        public const double FirstBallCost = 10;                             // se empieza con justo este dinero
+        public static double BallCost(int bought) => bought == 0 ? FirstBallCost : 8 * Math.Pow(1.10, bought - 1);
+
+        /// <summary>
+        /// Ventana de niveles: la bola que se compra es como mucho LevelWindow-1 niveles inferior a la mejor de la partida.
+        /// Así nunca hace falta un montón de bolas pequeñas para llegar arriba (Nv 8 -> se compran de Nv 4).
+        /// </summary>
+        public const int LevelWindow = 5;
+        public static int BuyLevel(int runMaxLevel) => Math.Max(1, runMaxLevel - (LevelWindow - 1));
+
+        /// <summary>Una bola de nivel N cuesta como 2^(N-1) maderas al precio actual (sin las tasas de fusión).</summary>
+        public static double BallCost(int bought, int level) => BallCost(bought) * Math.Pow(2, level - 1);
+        /// <summary>Fusionar cuesta caro: 35 veces lo que vale la bola resultante en cada caída.</summary>
+        public static double MergeCost(int tier, int newLevel) => 35 * BallValue(tier, newLevel);
 
         public static Color LevelColor(int level) => BallMaterials.FxColor(level);
         public static string LevelName(int level) => BallMaterials.GetName(level);
@@ -104,7 +119,7 @@ namespace Plinko
         public const int RushMaxBalls = 80;           // tope: incluso en avalancha, que se puedan seguir
         public const float RushMinInterval = 0.5f;    // sin auto-lanzador, la avalancha lanza igualmente
 
-        // --- Bola dorada (aparece al lanzar con cierta probabilidad) ---
+        // --- Bola shiny (aparece al lanzar con cierta probabilidad; multiplica el valor de esa bola) ---
         public static double GoldenBallChance(int lvl) => 0.06 * lvl;      // hasta 50%
         public const double GoldenBallMultiplier = 5.0;
 
@@ -125,7 +140,8 @@ namespace Plinko
         }
 
         // --- Desvío hacia los lados ---
-        public static double DriftChance(int lvl) => 0.07 * lvl;            // hasta 30% de rebotes forzados hacia fuera
+        // 15% de base para que los cubos de fuera salgan de vez en cuando; la mejora suma +7% por nivel (hasta 50%)
+        public static double DriftChance(int lvl) => 0.15 + 0.07 * lvl;
 
         /// <summary>Multiplicador base del cubo a distancia k del centro. Centro x1, bordes más altos.</summary>
         public static double BaseBucketMultiplier(int rows, int k)

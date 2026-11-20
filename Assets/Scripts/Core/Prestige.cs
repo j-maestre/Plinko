@@ -41,7 +41,9 @@ namespace Plinko
         /// <summary>Ganancias necesarias para tener n lingotes.</summary>
         public static double EarnedForCores(double n) => n * n * FirstCoreAt;
 
-        public const double UnspentCoreBonus = 0.01;           // cada lingote sin gastar: +1% de dinero
+        /// <summary>Cada prestigio hecho suma x0.5 a los ingresos (x1.5, x2, x2.5...). Los lingotes se gastan libremente.</summary>
+        public const double PrestigeIncomeStep = 0.5;
+        public static double PrestigeIncome(int prestigeCount) => 1.0 + PrestigeIncomeStep * prestigeCount;
 
         /// <summary>Precio en dinero de hacer prestigio: obliga a llegar lejos y sube con cada prestigio.</summary>
         public static double PrestigeCost(int prestigeCount) => 10e6 * Math.Pow(6, prestigeCount); // la 1ª partida solo tiene Bolas y Pinchos
@@ -97,15 +99,15 @@ namespace Plinko
             },
             new PrestigeDef
             {
-                Id = PrestigeIds.StartAuto, Name = "Goteo inicial", Desc = "Empiezas cada partida con niveles de Goteo",
+                Id = PrestigeIds.StartAuto, Name = "Caída rápida inicial", Desc = "Empiezas cada partida con niveles de Caída rápida",
                 BaseCost = 2, Growth = 1.9, MaxLevel = 10,
-                Effect = l => "Goteo nv " + PrestigeBalance.StartAuto(l)
+                Effect = l => "Caída rápida nv " + PrestigeBalance.StartAuto(l)
             },
             new PrestigeDef
             {
-                Id = PrestigeIds.GoldenBall, Name = "Oro puro", Desc = "La bola dorada vale más",
+                Id = PrestigeIds.GoldenBall, Name = "Brillo puro", Desc = "La bola shiny vale más",
                 BaseCost = 3, Growth = 2.0, MaxLevel = 10,
-                Effect = l => "Bola dorada x" + PrestigeBalance.GoldenBallMultiplier(l)
+                Effect = l => "Bola shiny x" + PrestigeBalance.GoldenBallMultiplier(l)
             },
             new PrestigeDef
             {

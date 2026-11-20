@@ -70,9 +70,9 @@ namespace Plinko
             {
                 new UpgradeDef
                 {
-                    Id = UpgradeIds.AutoLauncher, Name = "Goteo", Desc = "Las bolas salen más seguidas", Category = UpgradeCategory.Bolas,
-                    BaseCost = 3000, Growth = 3.2, MaxLevel = 10,
-                    Effect = l => "1 bola cada " + NumberFormat.Seconds(Balance.AutoInterval(l))
+                    Id = UpgradeIds.AutoLauncher, Name = "Caída rápida", Desc = "Las bolas caen más deprisa: más caídas por segundo (tope x2)", Category = UpgradeCategory.Bolas,
+                    BaseCost = 1500, Growth = 2.6, MaxLevel = 17,
+                    Effect = l => "Velocidad x" + Balance.FallSpeed(l).ToString("0.00")
                 },
                 new UpgradeDef
                 {
@@ -82,16 +82,16 @@ namespace Plinko
                 },
                 new UpgradeDef
                 {
-                    Id = UpgradeIds.GoldenBall, Name = "Bola dorada", Desc = "Probabilidad de lanzar una bola dorada que vale x5",
+                    Id = UpgradeIds.GoldenBall, Name = "Bola shiny", Desc = "Probabilidad de que una bola salga shiny: brilla y vale x5 su valor",
                     Category = UpgradeCategory.Bolas,
                     BaseCost = 150000, Growth = 2.7, MaxLevel = 9,
-                    Effect = l => NumberFormat.Percent(Balance.GoldenBallChance(l)) + " de bola dorada"
+                    Effect = l => NumberFormat.Percent(Balance.GoldenBallChance(l)) + " de bola shiny"
                 },
                 new UpgradeDef
                 {
-                    Id = UpgradeIds.PegFlat, Name = "Pinchos reforzados", Desc = "Cada rebote da un % del valor de la bola", Category = UpgradeCategory.Pinchos,
+                    Id = UpgradeIds.PegFlat, Name = "Pinchos reforzados", Desc = "Cada rebote suma un % al valor de la bola (se cobra al caer en el cubo)", Category = UpgradeCategory.Pinchos,
                     BaseCost = 200, Growth = 2.5, MaxLevel = 40,
-                    Effect = l => NumberFormat.Percent(Balance.BasePegPercent + Balance.PegPercentBonus(l)) + " del valor por rebote"
+                    Effect = l => NumberFormat.Percent(Balance.BasePegPercent + Balance.PegPercentBonus(l)) + " más de valor por rebote"
                 },
                 new UpgradeDef
                 {
@@ -136,9 +136,9 @@ namespace Plinko
                 },
                 new UpgradeDef
                 {
-                    Id = UpgradeIds.GoldenPegs, Name = "Pinchos dorados", Desc = "Pinchos que multiplican el valor de la bola al tocarlos", Category = UpgradeCategory.Pinchos,
-                    BaseCost = 500000, Growth = 3.2, MaxLevel = 15,
-                    Effect = l => (2 * l) + " pinchos (" + NumberFormat.Multiplier(Balance.GoldenPegMultiplier) + " valor)"
+                    Id = UpgradeIds.GoldenPegs, Name = "Pincho dorado", Desc = "Cada nivel vuelve dorado un pincho más: multiplica el valor de la bola al tocarlo", Category = UpgradeCategory.Pinchos,
+                    BaseCost = 50000, Growth = 2.3, MaxLevel = 20,
+                    Effect = l => l + (l == 1 ? " pincho (" : " pinchos (") + NumberFormat.Multiplier(Balance.GoldenPegMultiplier) + " valor)"
                 },
                 new UpgradeDef
                 {
@@ -219,7 +219,7 @@ namespace Plinko
             var chain = new Dictionary<string, (string req, int lvl)>
             {
                 // Bolas
-                { UpgradeIds.AutoLauncher, (UpgradeIds.Capacity, 2) },   // Huecos disponibles desde el inicio; Goteo después
+                { UpgradeIds.AutoLauncher, (UpgradeIds.Capacity, 2) },   // Huecos disponibles desde el inicio; Caída rápida después
                 { UpgradeIds.GoldenBall,  (UpgradeIds.Capacity, 4) },
                 // Pinchos
                 { UpgradeIds.Rows,        (UpgradeIds.PegFlat, 4) },
