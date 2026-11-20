@@ -24,6 +24,10 @@ namespace Plinko
         GameManager gm;
         RectTransform panel;
         Text coresText, bonusText, gainText, nextText, prestigeLabel, resetLabel;
+        Text summitText, summitLabel;
+        RectTransform summitFill;
+        Button summitButton;
+        RectTransform victory;
         RectTransform gainFill;
         Button prestigeButton;
         Punch panelPunch, coresPunch;
@@ -91,14 +95,18 @@ namespace Plinko
             prestigeButton = UIFactory.Button(btnRt, CoreColor, out prestigeLabel, "REINICIAR", 28);
             prestigeButton.onClick.AddListener(OnPrestigeClicked);
 
-            UIFactory.Text(UIFactory.Rect("Info", card, new Vector2(0.06f, 0.525f), new Vector2(0.94f, 0.585f)),
-                "Reinicia la partida a cambio de lingotes. Cada prestigio suma x0.5 a tus ingresos para siempre. Los lingotes gástalos en lo que quieras: secciones nuevas y mejoras permanentes.",
+            UIFactory.Text(UIFactory.Rect("Info", card, new Vector2(0.06f, 0.545f), new Vector2(0.94f, 0.588f)),
+                "Cada prestigio suma x0.5 a tus ingresos para siempre. Gasta los lingotes en lo que quieras.",
                 21, UIFactory.TextDim, TextAnchor.MiddleLeft).horizontalOverflow = HorizontalWrapMode.Wrap;
 
+            BuildSummit(UIFactory.Rect("Summit", card, new Vector2(0.05f, 0.46f), new Vector2(0.95f, 0.54f)));
+
             // Tienda
-            var shopTitle = UIFactory.Rect("ShopTitle", card, new Vector2(0.05f, 0.48f), new Vector2(0.95f, 0.52f));
+            var shopTitle = UIFactory.Rect("ShopTitle", card, new Vector2(0.05f, 0.42f), new Vector2(0.95f, 0.455f));
             UIFactory.Text(shopTitle, "TIENDA PERMANENTE", 28, new Color(1f, 0.85f, 0.55f), TextAnchor.MiddleLeft, true);
-            BuildShop(UIFactory.Rect("Shop", card, new Vector2(0.03f, 0.07f), new Vector2(0.97f, 0.475f)));
+            BuildShop(UIFactory.Rect("Shop", card, new Vector2(0.03f, 0.07f), new Vector2(0.97f, 0.415f)));
+            BuildVictory(canvasRoot);
+            gm.SummitReached += ShowVictory;
 
             // Borrar la partida entera (también lingotes y tienda). Doble toque para confirmar.
             var resetRt = UIFactory.Rect("Reset", card, new Vector2(0.06f, 0.012f), new Vector2(0.4f, 0.058f));
@@ -110,6 +118,80 @@ namespace Plinko
 
             gm.UpgradesChanged += Refresh;
             panel.gameObject.SetActive(false);
+        }
+
+        // ---------------------------------------------------------------- La Cima (meta final)
+        static readonly Color SummitColor = new Color(1f, 0.42f, 0.32f);
+
+        void BuildSummit(RectTransform rt)
+        {
+            UIFactory.Image(rt, new Color(SummitColor.r, SummitColor.g, SummitColor.b, 0.6f)).raycastTarget = false;
+            var body = UIFactory.Inset(UIFactory.Stretch("Body", rt), 3, 3, 3, 3);
+            UIFactory.Image(body, new Color(0.17f, 0.08f, 0.1f)).raycastTarget = false;
+            summitText = UIFactory.Text(UIFactory.Inset(UIFactory.Rect("Text", body, new Vector2(0, 0.42f), new Vector2(0.64f, 1f)), 22, 0, 0, 0),
+                "", 26, UIFactory.TextMain, TextAnchor.MiddleLeft, true);
+            var barBg = UIFactory.Inset(UIFactory.Rect("Bar", body, new Vector2(0, 0.14f), new Vector2(0.64f, 0.36f)), 22, 0, 0, 0);
+            UIFactory.Image(barBg, new Color(0, 0, 0, 0.45f)).raycastTarget = false;
+            summitFill = UIFactory.Rect("Fill", barBg, Vector2.zero, new Vector2(0, 1));
+            UIFactory.Image(summitFill, SummitColor).raycastTarget = false;
+            var btnRt = UIFactory.Rect("Button", body, new Vector2(0.67f, 0.12f), new Vector2(0.97f, 0.88f));
+            summitButton = UIFactory.Button(btnRt, SummitColor, out summitLabel, "ALCANZAR", 24);
+            summitButton.onClick.AddListener(() => gm.TryReachSummit());
+        }
+
+        void RefreshSummit()
+        {
+            var s = gm.State;
+            double cost = PrestigeBalance.SummitCost;
+            if (s.summitReached)
+            {
+                summitText.text = "<color=#FFD27A>¡CIMA ALCANZADA!</color>  <size=20><color=#9AA3C8>en " + s.summitPrestiges + " prestigios</color></size>";
+                SetFill(summitFill, 1f);
+                summitButton.interactable = false;
+                summitLabel.text = "HECHO";
+                return;
+            }
+            summitText.text = "LA CIMA  <size=22><color=#FFB0A0>meta final · " + NumberFormat.Money(cost) + "</color></size>";
+            // progreso en escala logarítmica: el precio es tan alto que una barra lineal no se movería
+            float p = s.money <= 1 ? 0f : Mathf.Clamp01((float)(System.Math.Log10(s.money) / System.Math.Log10(cost)));
+            SetFill(summitFill, p);
+            summitButton.interactable = gm.CanReachSummit && !gm.ShopLocked;
+            summitLabel.text = "ALCANZAR";
+        }
+
+        void BuildVictory(RectTransform canvasRoot)
+        {
+            victory = UIFactory.Stretch("Summit Victory", canvasRoot);
+            UIFactory.Image(victory, new Color(0.02f, 0.01f, 0.05f, 0.92f), false);
+            victory.gameObject.AddComponent<Button>().transition = Selectable.Transition.None;   // bloquea lo de detrás
+            var title = UIFactory.Text(UIFactory.Rect("Title", victory, new Vector2(0.05f, 0.56f), new Vector2(0.95f, 0.7f)),
+                "¡HAS ALCANZADO\nLA CIMA!", 84, CoreColor, TextAnchor.MiddleCenter, true);
+            UIFactory.AddShadow(title, 6f, 0.7f);
+            Ingot(UIFactory.Rect("IngotHolder", victory, new Vector2(0.5f, 0.75f), new Vector2(0.5f, 0.75f)), new Vector2(-96, 0), 3f);
+            UIFactory.Text(UIFactory.Rect("Sub", victory, new Vector2(0.08f, 0.43f), new Vector2(0.92f, 0.55f)),
+                "", 34, UIFactory.TextMain, TextAnchor.MiddleCenter);
+            var btnRt = UIFactory.Rect("Continue", victory, new Vector2(0.25f, 0.3f), new Vector2(0.75f, 0.37f));
+            UIFactory.Button(btnRt, CoreColor, out _, "SEGUIR JUGANDO", 34).onClick.AddListener(() => victory.gameObject.SetActive(false));
+            victory.gameObject.SetActive(false);
+        }
+
+        void ShowVictory()
+        {
+            Close();
+            victory.gameObject.SetActive(true);
+            victory.SetAsLastSibling();
+            var sub = victory.Find("Sub").GetComponent<Text>();
+            sub.text = "Lo has conseguido en " + gm.State.summitPrestiges + (gm.State.summitPrestiges == 1 ? " prestigio." : " prestigios.") +
+                       "\nPuedes seguir jugando y batir tus récords.";
+            gm.Background.Pulse(CoreColor, 1f);
+            gm.Board.Shake(0.8f);
+            gm.Audio.Record();
+            // fuegos artificiales sobre el tablero
+            for (int i = 0; i < 8; i++)
+            {
+                var pos = gm.Board.PegWorldPos(Random.Range(0, gm.Board.Rows), 0) + new Vector2(Random.Range(-3f, 3f), Random.Range(0f, 2f));
+                gm.Fx.Burst(pos, Color.HSVToRGB(Random.value, 0.6f, 1f), 30, 8f, 0.1f, 1f, -4f);
+            }
         }
 
         /// <summary>Icono de lingote de oro (anclado a la izquierda y centrado en vertical del padre).</summary>
@@ -262,6 +344,7 @@ namespace Plinko
             if (confirmTimer <= 0)
                 prestigeLabel.text = "REINICIAR\n<size=24>" + NumberFormat.Money(gm.PrestigeCost) + "</size>";
 
+            RefreshSummit();
             string hex = ColorUtility.ToHtmlStringRGB(CoreColor);
             foreach (var row in rows)
             {

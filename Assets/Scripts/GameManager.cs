@@ -50,6 +50,8 @@ namespace Plinko
         // --- Sobrecarga ---
         public float Overload => State.overload;              // 0..1 mientras se llena
         public bool InOverload { get; private set; }
+        /// <summary>Durante la Avalancha o la Sobrecarga no se compra nada: toda la atención al tablero.</summary>
+        public bool ShopLocked => InRush || InOverload || RushPending || (Intro != null && Intro.Playing);
         public float OverloadTimeLeft { get; private set; }
         public double TotalMultiplier => Stats.GlobalMultiplier * (InOverload ? Stats.OverloadMultiplier : 1.0);
         int hitsThisSecond;
@@ -59,6 +61,22 @@ namespace Plinko
         readonly Dictionary<string, int> levels = new Dictionary<string, int>();
         readonly Dictionary<string, int> prestigeLevels = new Dictionary<string, int>();
         public event Action Prestiged;
+        public event Action SummitReached;
+
+        public bool CanReachSummit => !State.summitReached && State.money >= PrestigeBalance.SummitCost;
+
+        /// <summary>Meta final: paga el precio de la Cima. El juego sigue después (modo infinito).</summary>
+        public bool TryReachSummit()
+        {
+            if (ShopLocked || !CanReachSummit) return false;
+            State.money -= PrestigeBalance.SummitCost;
+            State.summitReached = true;
+            State.summitPrestiges = State.prestigeCount;
+            Save();
+            MoneyChanged?.Invoke();
+            SummitReached?.Invoke();
+            return true;
+        }
         readonly IncomeTracker income = new IncomeTracker();
         float autoTimer, manualCooldown, saveTimer;
         const float AutoSaveInterval = 15f;
@@ -94,7 +112,16 @@ namespace Plinko
                 if (def != null && e.level > def.MaxLevel) e.level = def.MaxLevel;
                 levels[e.id] = e.level;
             }
-            foreach (var e in State.prestigeUpgrades) prestigeLevels[e.id] = e.level;
+            foreach (var e in State.prestigeUpgrades)
+            {
+                // "Riqueza" (multiplicador de dinero) ya no existe: se devuelven los lingotes gastados
+                if (e.id == PrestigeIds.Multiplier && e.level > 0)
+                {
+                    for (int l = 0; l < e.level; l++) State.cores += System.Math.Ceiling(System.Math.Pow(1.6, l));
+                    e.level = 0;
+                }
+                prestigeLevels[e.id] = e.level;
+            }
             // partidas anteriores a los candados: abrir las secciones donde ya hay mejoras compradas
             foreach (var e in State.upgrades)
             {
@@ -127,6 +154,9 @@ namespace Plinko
 
             Intro = new GameObject("AvalancheIntro").AddComponent<AvalancheIntro>();
             Intro.transform.SetParent(transform, false);
+            var star = new GameObject("ShootingStar").AddComponent<ShootingStar>();
+            star.transform.SetParent(transform, false);
+            star.Init(this);
 
             Balls = new GameObject("BallSystem").AddComponent<BallSystem>();
             Balls.transform.SetParent(transform, false);
@@ -152,6 +182,7 @@ namespace Plinko
         {
             float dt = Time.deltaTime;
             manualCooldown -= dt;
+            if (Board != null) Board.Focus = ShopLocked;   // tablero algo más grande durante los eventos
             income.Tick(dt);
             UpdateOverload(dt);
             UpdateRush(dt);
@@ -216,7 +247,7 @@ namespace Plinko
 
         public bool TryBuyBall()
         {
-            if (!Inventory.TryBuy()) return false;
+            if (ShopLocked || !Inventory.TryBuy()) return false;
             Audio.Buy();
             BallsChanged?.Invoke();
             MoneyChanged?.Invoke();
@@ -226,7 +257,7 @@ namespace Plinko
         /// <summary>Fusiona las dos bolas de mayor nivel. Si estaban cayendo desaparecen y la nueva cae desde arriba.</summary>
         public bool TryMerge()
         {
-            if (!Inventory.TryMerge(out var result, out var consumed)) return false;
+            if (ShopLocked || !Inventory.TryMerge(out var result, out var consumed)) return false;
             var a = Balls.RemoveFlying(consumed);
             var b = Balls.RemoveFlying(result);
             StartCoroutine(MergeSequence(result, a, b));
@@ -339,6 +370,15 @@ namespace Plinko
         }
 
         // --- Economía ---
+
+        /// <summary>Premio directo (ya calculado con multiplicadores), p. ej. la estrella fugaz.</summary>
+        public void GrantBonus(double amount)
+        {
+            State.money += amount;
+            State.totalEarned += amount;
+            State.runEarned += amount;
+            MoneyChanged?.Invoke();
+        }
 
         public void Earn(double amount)
         {
@@ -454,7 +494,7 @@ namespace Plinko
 
         public int GetLevel(string id) => levels.TryGetValue(id, out int l) ? l : 0;
 
-        public double CostOf(UpgradeDef def) => def.CostAt(GetLevel(def.Id));
+        public double CostOf(UpgradeDef def) => def.PurchaseCost(GetLevel(def.Id));
 
         /// <summary>Requisito de desbloqueo cumplido (o ya tiene niveles comprados).</summary>
         public bool IsUnlocked(UpgradeDef def) =>
@@ -493,13 +533,15 @@ namespace Plinko
 
         public bool TryBuy(UpgradeDef def)
         {
+            if (ShopLocked) return false;
             int lvl = GetLevel(def.Id);
             if (lvl >= def.MaxLevel || !IsVisible(def)) return false;
             double cost = CostOf(def);
             if (State.money < cost) return false;
 
             State.money -= cost;
-            SetLevel(def.Id, lvl + 1);
+            int newLevel = def.NextLevel(lvl);
+            SetLevel(def.Id, newLevel);
 
             int oldRows = Stats.Rows;
             Stats.Recalculate();
@@ -518,7 +560,7 @@ namespace Plinko
             if (def.Id == UpgradeIds.PegFlat)
             {
                 // cada mejora recorre los pinchos con una ola; al cambiar de material, además, se anuncia
-                int stage = PegStyles.StageFor(lvl + 1);
+                int stage = PegStyles.StageFor(newLevel);
                 if (Board.SetPegStage(stage, true))
                 {
                     var c = PegStyles.Color(stage);
@@ -569,6 +611,7 @@ namespace Plinko
 
         public bool TryBuyPrestige(PrestigeDef def)
         {
+            if (ShopLocked) return false;
             int lvl = GetPrestigeLevel(def.Id);
             if (lvl >= def.MaxLevel) return false;
             double cost = def.CostAt(lvl);

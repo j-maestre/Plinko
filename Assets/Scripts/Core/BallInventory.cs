@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Plinko
@@ -30,7 +31,9 @@ namespace Plinko
             owned.Clear();
             waiting.Clear();
             if (levels == null) return;
-            foreach (var l in levels) Add(new OwnedBall { Level = l < 1 ? 1 : l });
+            foreach (var l in levels) Add(new OwnedBall { Level = Math.Clamp(l, 1, Balance.MaxBallLevel) });   // partidas viejas por encima del tope
+            gm.State.maxLevel = Math.Min(gm.State.maxLevel, Balance.MaxBallLevel);
+            gm.State.runMaxLevel = Math.Min(gm.State.runMaxLevel, Balance.MaxBallLevel);
             foreach (var b in owned) { if (b.Level > gm.State.maxLevel) gm.State.maxLevel = b.Level; if (b.Level > gm.State.runMaxLevel) gm.State.runMaxLevel = b.Level; }
             RaiseToBuyLevel();   // partidas guardadas con bolas por debajo del tramo actual
         }
@@ -104,6 +107,7 @@ namespace Plinko
             int best = 0;
             foreach (var b in owned)
             {
+                if (b.Level >= Balance.MaxBallLevel) continue;   // las Estelares ya no se fusionan
                 counts.TryGetValue(b.Level, out int c);
                 counts[b.Level] = ++c;
                 if (c >= 2 && b.Level > best) best = b.Level;

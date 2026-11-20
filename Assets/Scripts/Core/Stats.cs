@@ -54,8 +54,7 @@ namespace Plinko
                                  + PrestigeBalance.OverloadBonus(gm.GetPrestigeLevel(PrestigeIds.Overload));
 
             // Prestigio
-            GlobalMultiplier = PrestigeBalance.Multiplier(gm.GetPrestigeLevel(PrestigeIds.Multiplier))
-                               * PrestigeBalance.PrestigeIncome(gm.State.prestigeCount);
+            GlobalMultiplier = PrestigeBalance.PrestigeIncome(gm.State.prestigeCount);   // solo el x0.5 por prestigio
             RushDuration = PrestigeBalance.RushDuration(gm.GetPrestigeLevel(PrestigeIds.RushDuration));
             RushDelayFactor = PrestigeBalance.RushDelayFactor(gm.GetPrestigeLevel(PrestigeIds.RushFrequency));
             GoldenBallMultiplier = PrestigeBalance.GoldenBallMultiplier(gm.GetPrestigeLevel(PrestigeIds.GoldenBall));

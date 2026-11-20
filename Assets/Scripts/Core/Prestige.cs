@@ -43,6 +43,12 @@ namespace Plinko
 
         /// <summary>Cada prestigio hecho suma x0.5 a los ingresos (x1.5, x2, x2.5...). Los lingotes se gastan libremente.</summary>
         public const double PrestigeIncomeStep = 0.5;
+
+        /// <summary>
+        /// Meta final "La Cima": un precio desorbitado (1 Sx = 10^21) que obliga a encadenar muchos prestigios
+        /// (el prestigio nº 19 ya cuesta del orden de 1 Sx). Se paga con dinero de la partida.
+        /// </summary>
+        public const double SummitCost = 1e21;
         public static double PrestigeIncome(int prestigeCount) => 1.0 + PrestigeIncomeStep * prestigeCount;
 
         /// <summary>Precio en dinero de hacer prestigio: obliga a llegar lejos y sube con cada prestigio.</summary>
@@ -71,12 +77,6 @@ namespace Plinko
                 Id = PrestigeIds.BallTier, Name = "Calidad de bola", Desc = "Todas tus bolas valen más, para siempre",
                 BaseCost = 3, Growth = 2.5, MaxLevel = Balance.Tiers.Length - 1,
                 Effect = l => Balance.Tiers[l].Name + " (valor base " + NumberFormat.Format(Balance.Tiers[l].Value) + ")"
-            },
-            new PrestigeDef
-            {
-                Id = PrestigeIds.Multiplier, Name = "Riqueza", Desc = "Más dinero de todas las fuentes",
-                BaseCost = 1, Growth = 1.6, MaxLevel = 100,
-                Effect = l => "Dinero " + NumberFormat.Multiplier(PrestigeBalance.Multiplier(l))
             },
             new PrestigeDef
             {

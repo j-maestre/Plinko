@@ -24,6 +24,23 @@ namespace Plinko
         public Func<GameManager, bool> Visible;
 
         public double CostAt(int level) => BaseCost * Math.Pow(Growth, level) * Balance.LateLevelFactor(level);
+
+        // --- Menos compras pero más gordas ---
+        // Las mejoras largas suben de 2 en 2 niveles internos por compra (doble efecto, se paga la suma de ambos).
+        // Las cortas (tablero, secciones de pocas compras) siguen de 1 en 1.
+        public int Step => MaxLevel >= 8 ? 2 : 1;
+        /// <summary>Nivel que ve el jugador (compras hechas).</summary>
+        public int Shown(int level) => (level + Step - 1) / Step;
+        public int ShownMax => Shown(MaxLevel);
+        /// <summary>Nivel interno tras la siguiente compra.</summary>
+        public int NextLevel(int level) => Math.Min(MaxLevel, level + Step);
+        /// <summary>Precio de la siguiente compra (suma de los niveles internos que sube).</summary>
+        public double PurchaseCost(int level)
+        {
+            double c = 0;
+            for (int l = level; l < NextLevel(level); l++) c += CostAt(l);
+            return c;
+        }
     }
 
     public static class UpgradeIds
@@ -70,8 +87,8 @@ namespace Plinko
             {
                 new UpgradeDef
                 {
-                    Id = UpgradeIds.AutoLauncher, Name = "Caída rápida", Desc = "Las bolas caen más deprisa: más caídas por segundo (tope x2)", Category = UpgradeCategory.Bolas,
-                    BaseCost = 1500, Growth = 2.6, MaxLevel = 17,
+                    Id = UpgradeIds.AutoLauncher, Name = "Caída rápida", Desc = "Las bolas caen más deprisa: más caídas por segundo (tope x1.5)", Category = UpgradeCategory.Bolas,
+                    BaseCost = 1500, Growth = 2.6, MaxLevel = 9,
                     Effect = l => "Velocidad x" + Balance.FallSpeed(l).ToString("0.00")
                 },
                 new UpgradeDef

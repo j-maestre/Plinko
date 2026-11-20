@@ -88,6 +88,12 @@ namespace Plinko
 
         public void Shake(float amount) => trauma = Mathf.Min(1f, trauma + amount);
 
+        // --- Enfoque: durante Avalancha/Sobrecarga el tablero se acerca un poco ---
+        /// <summary>true = acercar el tablero (eventos). Se anima solo.</summary>
+        public bool Focus;
+        const float FocusZoom = 0.9f;       // tamaño de cámara al enfocar (0.9 = tablero un 11% más grande)
+        float focusT, boardCenterY, screenCenterFrac, minSize;
+
         public void Build(int rows, int golden, int clone)
         {
             cam = Camera.main;
@@ -396,6 +402,12 @@ namespace Plinko
             }
             else if (cam != null)
             {
+                // acercamiento suave manteniendo el tablero centrado en su franja (sin recortar los cubos de los lados)
+                focusT = Mathf.MoveTowards(focusT, Focus ? 1f : 0f, Time.unscaledDeltaTime * 2.5f);
+                float e = focusT * focusT * (3f - 2f * focusT);
+                float size = Mathf.Max(minSize, baseSize * Mathf.Lerp(1f, FocusZoom, e));
+                cam.orthographicSize = size;
+                camBase.y = boardCenterY - (screenCenterFrac - 0.5f) * 2f * size;
                 if (trauma > 0)
                 {
                     trauma = Mathf.Max(0, trauma - dt * 1.8f);
@@ -431,6 +443,9 @@ namespace Plinko
             float boardCenterY = (top + bottom) * 0.5f;
             float screenCenter = BottomUI + frac * 0.5f; // 0..1 desde abajo
             var p = cam.transform.position;
+            this.boardCenterY = boardCenterY;
+            screenCenterFrac = screenCenter;
+            minSize = width * 0.98f / (2f * aspect);   // nunca tan cerca que se corten los bordes
             camBase = new Vector3(0, boardCenterY - (screenCenter - 0.5f) * 2f * size, p.z);
             cam.transform.position = camBase;
 

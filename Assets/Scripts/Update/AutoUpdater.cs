@@ -179,6 +179,19 @@ namespace Plinko
             waitingForPermission = false;
             if (GameManager.Instance != null) GameManager.Instance.Save(); // la instalación cierra la app
 
+            if (IsXiaomi())
+            {
+                // HyperOS/MIUI bloquea las sesiones de instalación de apps normales: instalador clásico directamente
+                try
+                {
+                    CallBridgeVoid("install", ApkFileName);
+                    ShowPill("Confirma la instalación en la ventana del sistema", 5f);
+                }
+                catch (Exception e) { ShowPill("No se pudo abrir el instalador: " + e.Message, 8f); }
+                busy = false;
+                return;
+            }
+
             try
             {
                 CallBridgeVoid("installSession", apkPath);
@@ -194,6 +207,23 @@ namespace Plinko
             }
         }
 
+        static bool IsXiaomi()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var build = new AndroidJavaClass("android.os.Build"))
+                {
+                    string m = (build.GetStatic<string>("MANUFACTURER") + " " + build.GetStatic<string>("BRAND")).ToLowerInvariant();
+                    return m.Contains("xiaomi") || m.Contains("redmi") || m.Contains("poco");
+                }
+            }
+            catch { return false; }
+#else
+            return false;
+#endif
+        }
+
         IEnumerator WatchForError()
         {
             for (float t = 0; t < 30f; t += 1f)
@@ -203,7 +233,16 @@ namespace Plinko
                 try { err = CallBridgeStatic<string>("takeLastError"); } catch { }
                 if (!string.IsNullOrEmpty(err))
                 {
-                    ShowPill("No se pudo instalar: " + err, 5f);
+                    // Algunas capas (Xiaomi/HyperOS) rechazan la instalación en segundo plano con
+                    // "INSTALL_FAILED_ABORTED: Permission denied": se abre el instalador clásico del sistema,
+                    // que se lanza en primer plano y pide confirmar.
+                    Debug.Log("[Updater] La sesión falló (" + err + "), se usa el instalador clásico");
+                    try
+                    {
+                        CallBridgeVoid("install", ApkFileName);
+                        ShowPill("Confirma la instalación en la ventana del sistema", 5f);
+                    }
+                    catch (Exception e) { ShowPill("No se pudo instalar: " + err + " / " + e.Message, 8f); }
                     busy = false;
                     yield break;
                 }

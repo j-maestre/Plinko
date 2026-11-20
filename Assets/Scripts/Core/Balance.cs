@@ -48,8 +48,8 @@ namespace Plinko
         /// <summary>Goteo: segundos entre bola y bola. Rápido desde el principio; la mejora lo acelera más.</summary>
         public static float AutoInterval(int lvl) => Mathf.Max(0.12f, 0.6f * Mathf.Pow(0.85f, lvl));
 
-        /// <summary>Caída rápida: +6% de velocidad de caída por nivel, con tope x2.</summary>
-        public const float MaxFallSpeed = 2f;
+        /// <summary>Caída rápida: +6% de velocidad de caída por nivel, con tope x1.5.</summary>
+        public const float MaxFallSpeed = 1.5f;
         public static float FallSpeed(int lvl) => Mathf.Min(MaxFallSpeed, 1f + 0.06f * lvl);
 
         // --- Bolas con nivel (fusión) ---
@@ -63,7 +63,10 @@ namespace Plinko
         /// Así nunca hace falta un montón de bolas pequeñas para llegar arriba (Nv 8 -> se compran de Nv 4).
         /// </summary>
         public const int LevelWindow = 5;
-        public static int BuyLevel(int runMaxLevel) => Math.Max(1, runMaxLevel - (LevelWindow - 1));
+        public static int BuyLevel(int runMaxLevel) => Math.Max(1, Math.Min(MaxBallLevel, runMaxLevel) - (LevelWindow - 1));
+
+        /// <summary>Nivel máximo de bola (Estelar). Más allá no se fusiona: se progresa con la calidad de bola.</summary>
+        public static int MaxBallLevel => BallMaterials.Count;
 
         /// <summary>Una bola de nivel N cuesta como 2^(N-1) maderas al precio actual (sin las tasas de fusión).</summary>
         public static double BallCost(int bought, int level) => BallCost(bought) * Math.Pow(2, level - 1);

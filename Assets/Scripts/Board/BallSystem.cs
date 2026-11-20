@@ -21,6 +21,7 @@ namespace Plinko
             public float T, Duration, Arc;
             public bool Dropping;       // primer tramo: caída libre hasta el pincho superior
             public double Value;
+            public double LaunchValue;  // valor al salir: base de los % de pinchos y potenciador (no se acumulan entre sí)
             public bool IsClone;
             public float Pulse;
             public Color BaseColor;
@@ -57,7 +58,7 @@ namespace Plinko
             b.IsClone = false;
             b.IsRush = true;
             b.Value = 0;
-            b.SizeMul = 1.5f;
+            b.SizeMul = 2.3f;   // mucho más grande que cualquier bola (las más altas llegan a x1.6)
             b.BaseColor = RushBallColor;
             b.Sr.sprite = SpriteFactory.Sphere;
             b.Rest = RushBallColor;
@@ -152,6 +153,7 @@ namespace Plinko
             SetGolden(b, gm.Stats.GoldenBallChance > 0 && Random.value < gm.Stats.GoldenBallChance);
             if (b.IsGolden) b.Value *= gm.Stats.GoldenBallMultiplier;
             if (gm.InRush) b.Value *= gm.RushMultiplier;
+            b.LaunchValue = b.Value;
             b.Row = 0;
             b.Col = 0;
             float spread = gm.InRush ? 0.35f : 0.06f;
@@ -390,7 +392,7 @@ namespace Plinko
             // Ingreso por rebote: fijo (escalado por tier) + % del valor actual de la bola
             // Cada rebote no paga al momento: suma un % al valor de la bola, que se cobra al caer
             // (y por tanto también se multiplica por el cubo)
-            double income = b.Value * s.PegPercent;
+            double income = b.LaunchValue * s.PegPercent;   // sobre el valor de salida: crece lineal, no exponencial
             if (income > 0)
             {
                 b.Value += income;
@@ -414,7 +416,7 @@ namespace Plinko
 
             if (s.BonusChance > 0 && Random.value < s.BonusChance)
             {
-                b.Value *= 1 + s.BonusAmount;
+                b.Value += b.LaunchValue * s.BonusAmount;   // suma, no multiplica (antes se disparaba con muchos rebotes)
                 Pulse(b, BonusColor);
                 gm.Fx.Ring(pos, BonusColor, 0.55f, 0.22f);
                 gm.UI.Popup(pos + Vector2.up * 0.25f, "+" + NumberFormat.Percent(s.BonusAmount), BonusColor, 0.6f, true);
@@ -493,6 +495,7 @@ namespace Plinko
             c.Owner = null;
             c.SizeMul = parent.SizeMul;
             c.Value = parent.Value;
+            c.LaunchValue = parent.LaunchValue;
             c.BaseColor = Color.Lerp(parent.BaseColor, Color.white, 0.4f);
             c.Sr.sprite = parent.Sr.sprite;
             c.Rest = new Color(1f, 1f, 1f, 0.8f);   // el clon, algo translúcido

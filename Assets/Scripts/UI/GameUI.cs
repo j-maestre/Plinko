@@ -490,6 +490,7 @@ namespace Plinko
         void BuildBottomPanel()
         {
             var holder = UIFactory.Rect("BottomPanel", root, Vector2.zero, new Vector2(1, BoardView.BottomUI));
+            bottomGroup = holder.gameObject.AddComponent<CanvasGroup>();   // se apaga durante los eventos
             var bg = UIFactory.Inset(UIFactory.Stretch("Bg", holder), 0, -40, 0, 0); // se esconde por abajo
             UIFactory.Image(bg, UIFactory.Panel);
             var border = UIFactory.Rect("TopLine", holder, new Vector2(0.06f, 1f), new Vector2(0.94f, 1f));
@@ -659,6 +660,7 @@ namespace Plinko
         static readonly Color MergeColor = new Color(0.42f, 0.26f, 0.70f);
         Text buyPrice, mergePrice;
         Image buyIconImg, mergeFromA, mergeFromB, mergeTo;
+        CanvasGroup bottomGroup;
         Punch buyIconPunch;
 
         /// <summary>
@@ -951,11 +953,14 @@ namespace Plinko
             bool reqKnown = req != null && gm.IsVisible(req);
             int have = req != null ? gm.GetLevel(req.Id) : 0;
             float progress = def.RequiresLevel > 0 ? Mathf.Clamp01((float)have / def.RequiresLevel) : 0;
+            // se muestra en compras (niveles que ve el jugador), no en niveles internos
+            int needShown = req != null ? req.Shown(def.RequiresLevel) : def.RequiresLevel;
+            int haveShown = req != null ? Mathf.Min(req.Shown(have), needShown) : have;
 
             row.Level.text = "?";
             row.Desc.text = reqKnown
                 ? "Sube <color=#" + ColorUtility.ToHtmlStringRGB(UIFactory.CategoryColor(req.Category)) + ">" + req.Name +
-                  "</color> a nivel " + def.RequiresLevel + "  (" + have + "/" + def.RequiresLevel + ")"
+                  "</color> a nivel " + needShown + "  (" + haveShown + "/" + needShown + ")"
                 : "Bloqueada";
             row.Effect.text = "";
             row.Button.interactable = false;
@@ -965,13 +970,40 @@ namespace Plinko
             SetFill(row.Fill, progress);
         }
 
-        /// <summary>Desbloqueadas arriba (en orden de catálogo) y bloqueadas al final.</summary>
+        /// <summary>
+        /// Orden fijo por progresión: primero lo que se desbloquea antes (cadena de requisitos más corta y
+        /// con menos niveles necesarios). No depende de lo que tengas, así desbloquear no mueve nada de sitio.
+        /// </summary>
         void ReorderRows()
         {
             orderDirty = false;
-            int index = 0;
-            // orden fijo (el de la definición): desbloquear una mejora no la mueve de sitio
-            foreach (var row in rows) row.Go.transform.SetSiblingIndex(index++);
+            if (sortedRows == null)
+            {
+                sortedRows = new List<UpgradeRow>(rows);
+                var index = new Dictionary<UpgradeRow, int>();
+                for (int i = 0; i < rows.Count; i++) index[rows[i]] = i;
+                sortedRows.Sort((a, b) =>
+                {
+                    int c = UnlockKey(a.Def).CompareTo(UnlockKey(b.Def));
+                    return c != 0 ? c : index[a].CompareTo(index[b]);
+                });
+            }
+            int n = 0;
+            foreach (var row in sortedRows) row.Go.transform.SetSiblingIndex(n++);
+        }
+
+        List<UpgradeRow> sortedRows;
+
+        /// <summary>Cuánto hay que avanzar para desbloquearla: suma de niveles requeridos en toda la cadena.</summary>
+        static int UnlockKey(UpgradeDef def)
+        {
+            int key = 0, guard = 0;
+            while (def != null && !string.IsNullOrEmpty(def.RequiresId) && guard++ < 20)
+            {
+                key += Mathf.Max(1, def.RequiresLevel);
+                def = UpgradeCatalog.Get(def.RequiresId);
+            }
+            return key;
         }
 
         void BuildBanner()
@@ -1093,10 +1125,10 @@ namespace Plinko
                 if (locked) { RefreshLocked(row); continue; }
 
                 string catHex = ColorUtility.ToHtmlStringRGB(row.Cat);
-                row.Level.text = lvl.ToString();
+                row.Level.text = def.Shown(lvl).ToString();
                 row.Effect.text = max
                     ? def.Effect(lvl)
-                    : def.Effect(lvl) + "  <color=#" + catHex + ">→  " + def.Effect(lvl + 1) + "</color>";
+                    : def.Effect(lvl) + "  <color=#" + catHex + ">→  " + def.Effect(def.NextLevel(lvl)) + "</color>";
                 row.Cost.text = max ? "MÁX" : NumberFormat.Money(cost);
                 row.Button.interactable = canBuy;
                 float progress = max ? 0f : (float)System.Math.Min(1.0, gm.Money / cost);
@@ -1125,6 +1157,14 @@ namespace Plinko
         {
             float dt = Time.unscaledDeltaTime;
             UpdateMoney(dt);
+            // Avalancha/Sobrecarga: compras desactivadas y panel atenuado para mirar el tablero
+            if (bottomGroup != null)
+            {
+                bool locked = gm.ShopLocked;
+                bottomGroup.alpha = Mathf.MoveTowards(bottomGroup.alpha, locked ? 0.35f : 1f, dt * 3f);
+                bottomGroup.interactable = !locked;
+                bottomGroup.blocksRaycasts = !locked;
+            }
             // el icono de COMPRAR siempre muestra la bola del nivel que se compra ahora
             if (buyIconImg != null)
             {

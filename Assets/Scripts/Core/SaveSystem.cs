@@ -33,6 +33,8 @@ namespace Plinko
         public List<int> balls = new List<int>();   // se empieza sin bolas: hay que comprar la primera
         public int ballsBought;
         public bool tutorialDone;
+        public bool summitReached;     // ha alcanzado la Cima (meta final)
+        public int summitPrestiges;    // prestigios que llevaba al conseguirlo
         public int tutorialStep;   // 0 comprar, 1 fusionar, 2 primera mejora, 3 terminado
         public int maxLevel;
         public int runMaxLevel;    // mejor bola de esta partida (decide de qué nivel se compran)       // mejor bola conseguida nunca (no se pierde con el prestigio)

@@ -23,6 +23,8 @@ namespace Plinko
         static readonly Color Energy = new Color(0.45f, 0.95f, 1f);
 
         public bool Playing { get; private set; }
+        float playingSince;
+        Action pendingBurst;   // se invoca aunque la cinemática se interrumpa
 
         class Spark { public SpriteRenderer Sr; public Vector2 From; public float T, Speed; }
 
@@ -44,6 +46,8 @@ namespace Plinko
         public void Play(int bucket, Action onBurst)
         {
             if (Playing) return;
+            playingSince = Time.unscaledTime;
+            pendingBurst = onBurst;
             StartCoroutine(Run(bucket, onBurst));
         }
 
@@ -67,7 +71,7 @@ namespace Plinko
             bucketSr.sortingOrder = 30;
 
             // 1) Zoom al cubo
-            for (float t = 0; t < ZoomIn; t += Time.unscaledDeltaTime)
+            for (float t = 0; t < ZoomIn && bucketSr != null; t += Time.unscaledDeltaTime)
             {
                 float e = EaseOutCubic(t / ZoomIn);
                 board.SetCinematic(Vector2.Lerp(basePos, zoomPos, e), Mathf.Lerp(baseSize, zoomSize, e));
@@ -77,7 +81,7 @@ namespace Plinko
 
             // 2) Carga: cada vez más rápida, más brillante y más temblor
             float ringTimer = 0, sparkTimer = 0, soundTimer = 0, rayAngle = 0;
-            for (float t = 0; t < Charge; t += Time.unscaledDeltaTime)
+            for (float t = 0; t < Charge && bucketSr != null; t += Time.unscaledDeltaTime)
             {
                 float dt = Time.unscaledDeltaTime;
                 float k = t / Charge;          // 0..1
@@ -129,9 +133,12 @@ namespace Plinko
             }
 
             // 3) ¡Estalla!
-            bucketSr.sortingOrder = 1;
-            bucketSr.color = bucketColor;
-            bucketSr.transform.localScale = bucketScale;
+            if (bucketSr != null)
+            {
+                bucketSr.sortingOrder = 1;
+                bucketSr.color = bucketColor;
+                bucketSr.transform.localScale = bucketScale;
+            }
             ClearCharge();
             flash.color = Color.white;
             bigText.gameObject.SetActive(true);
@@ -139,6 +146,7 @@ namespace Plinko
             gm.Audio.Crit();
             gm.Background.Pulse(Energy, 1f);
             Time.timeScale = 0.2f;   // arranca en cámara lenta y acelera poco a poco
+            pendingBurst = null;
             onBurst?.Invoke();
             gm.Fx.Burst(bucketPos, Energy, 40, 10f, 0.1f, 0.9f, -4f);
             gm.Fx.Ring(bucketPos, Color.white, 4f, 0.5f);
@@ -169,6 +177,26 @@ namespace Plinko
             flash.color = new Color(1, 1, 1, 0);
             bigText.gameObject.SetActive(false);
             Playing = false;
+        }
+
+        /// <summary>
+        /// Red de seguridad: si la cinemática se queda colgada (p. ej. por un error), se restaura el tiempo
+        /// y la cámara para que el juego nunca se quede congelado.
+        /// </summary>
+        void Update()
+        {
+            if (!Playing || Time.unscaledTime - playingSince < 8f) return;
+            Debug.LogWarning("[Avalancha] La cinemática no terminó: se restaura el juego");
+            StopAllCoroutines();
+            if (dim != null) { ClearCharge(); dim.enabled = false; }
+            if (flash != null) flash.color = new Color(1, 1, 1, 0);
+            if (bigText != null) bigText.gameObject.SetActive(false);
+            Time.timeScale = 1f;
+            gm.Board.EndCinematic();
+            Playing = false;
+            var burst = pendingBurst;
+            pendingBurst = null;
+            burst?.Invoke();
         }
 
         // ------------------------------------------------------------------ Piezas visuales
