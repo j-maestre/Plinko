@@ -30,8 +30,9 @@ namespace Plinko
         public List<string> unlockedTabs = new List<string>(); // secciones compradas (permanentes)
 
         // --- Bolas del jugador (niveles) ---
-        public List<int> balls = new List<int> { 1 };
+        public List<int> balls = new List<int>();   // se empieza sin bolas: hay que comprar la primera
         public int ballsBought;
+        public bool tutorialDone;
         public List<UpgradeEntry> upgrades = new List<UpgradeEntry>();
         public long lastSaveUnix;
     }

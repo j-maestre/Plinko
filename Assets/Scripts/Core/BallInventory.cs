@@ -29,7 +29,7 @@ namespace Plinko
         {
             owned.Clear();
             waiting.Clear();
-            if (levels == null || levels.Count == 0) levels = new List<int> { 1 };
+            if (levels == null) return;
             foreach (var l in levels) Add(new OwnedBall { Level = l < 1 ? 1 : l });
         }
 

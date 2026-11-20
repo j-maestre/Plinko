@@ -149,7 +149,7 @@ namespace Plinko
                 },
                 new UpgradeDef
                 {
-                    Id = UpgradeIds.Rows, Name = "Expandir tablero", Desc = "Más rebotes por bola y cubos con mayor multiplicador", Category = UpgradeCategory.Pinchos,
+                    Id = UpgradeIds.Rows, Name = "Expandir tablero", Desc = "+2 filas de pinchos y +2 cubos en los bordes (multiplican más)", Category = UpgradeCategory.Pinchos,
                     BaseCost = 150000, Growth = 35, MaxLevel = Balance.MaxRowLevels,
                     Effect = l => Balance.Rows(l) + " filas, " + (Balance.Rows(l) + 1) + " cubos"
                 },

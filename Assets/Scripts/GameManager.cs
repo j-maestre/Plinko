@@ -222,14 +222,46 @@ namespace Plinko
         public bool TryMerge()
         {
             if (!Inventory.TryMerge(out var result, out var consumed)) return false;
-            Balls.RemoveFlying(consumed);
-            Balls.RemoveFlying(result);
-            Balls.Launch(result, true);
-            Audio.Record();
-            UI.Popup(Board.SpawnPos + Vector2.up * 0.6f, "¡Nivel " + result.Level + "!", Balance.LevelColor(result.Level), 0.9f);
+            var a = Balls.RemoveFlying(consumed);
+            var b = Balls.RemoveFlying(result);
+            StartCoroutine(MergeSequence(result, a, b));
             BallsChanged?.Invoke();
             MoneyChanged?.Invoke();
             return true;
+        }
+
+        /// <summary>
+        /// Las dos bolas vuelan como chispas hacia arriba, se juntan con un destello
+        /// y la nueva cae desde allí con su nombre.
+        /// </summary>
+        System.Collections.IEnumerator MergeSequence(OwnedBall result, Vector2? fromA, Vector2? fromB)
+        {
+            Vector2 spawn = Board.SpawnPos;
+            var oldColor = Balance.LevelColor(result.Level - 1);
+            var newColor = Balance.LevelColor(result.Level);
+            Vector2 a = fromA ?? spawn + new Vector2(-1.6f, -1.2f);   // si no estaban cayendo, salen de los lados
+            Vector2 b = fromB ?? spawn + new Vector2(1.6f, -1.2f);
+            const float travel = 0.45f;
+            Fx.Converge(a, spawn, oldColor, 16, travel);
+            Fx.Converge(b, spawn, oldColor, 16, travel);
+            Audio.Special(0.8f);
+
+            for (float t = 0; t < travel; t += Time.unscaledDeltaTime)
+            {
+                if (t > travel * 0.5f) Fx.Flash(spawn, new Color(newColor.r, newColor.g, newColor.b, 0.15f), 0.6f + t * 2f, 0.08f);
+                yield return null;
+            }
+
+            // ¡Fusión!
+            Fx.Flash(spawn, new Color(1, 1, 1, 0.9f), 2.6f, 0.3f);
+            Fx.Ring(spawn, newColor, 3f, 0.5f);
+            Fx.Ring(spawn, Color.white, 1.6f, 0.3f);
+            Fx.Burst(spawn, newColor, 34, 7f, 0.1f, 0.8f, -3f);
+            Board.Shake(0.3f);
+            Background.Pulse(newColor, 0.6f);
+            Audio.Record();
+            UI.Popup(spawn + Vector2.up * 0.7f, "¡" + Balance.LevelName(result.Level) + "!", newColor, 1.15f);
+            Balls.Launch(result, true);
         }
 
         // --- Economía ---
@@ -465,7 +497,7 @@ namespace Plinko
             State.overload = 0;
             State.upgrades.Clear();
             levels.Clear();
-            State.balls = new System.Collections.Generic.List<int> { 1 };
+            State.balls = new System.Collections.Generic.List<int>();
             State.ballsBought = 0;
 
             // ventajas de inicio compradas en la tienda

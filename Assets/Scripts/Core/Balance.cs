@@ -51,24 +51,12 @@ namespace Plinko
         // --- Bolas con nivel (fusión) ---
         public const double MergeMultiplier = 2.3;   // dos bolas iguales -> una que vale un poco más que las dos juntas
         public static double BallValue(int tier, int level) => Tiers[tier].Value * Math.Pow(MergeMultiplier, level - 1);
-        public static double BallCost(int bought) => 20 * Math.Pow(1.25, bought);
+        public static double BallCost(int bought) => bought == 0 ? 0 : 20 * Math.Pow(1.25, bought - 1); // la primera, gratis
         /// <summary>Fusionar cuesta caro: 20 veces lo que vale la bola resultante en cada caída.</summary>
         public static double MergeCost(int tier, int newLevel) => 20 * BallValue(tier, newLevel);
 
-        static readonly Color[] LevelColors =
-        {
-            new Color(0.85f, 0.90f, 1.00f), // 1
-            new Color(0.45f, 0.95f, 0.55f), // 2
-            new Color(0.35f, 0.85f, 1.00f), // 3
-            new Color(0.40f, 0.55f, 1.00f), // 4
-            new Color(0.70f, 0.45f, 1.00f), // 5
-            new Color(1.00f, 0.45f, 0.80f), // 6
-            new Color(1.00f, 0.35f, 0.35f), // 7
-            new Color(1.00f, 0.60f, 0.25f), // 8
-            new Color(1.00f, 0.90f, 0.30f), // 9
-            new Color(1.00f, 1.00f, 1.00f), // 10
-        };
-        public static Color LevelColor(int level) => LevelColors[(Math.Max(1, level) - 1) % LevelColors.Length];
+        public static Color LevelColor(int level) => BallMaterials.FxColor(level);
+        public static string LevelName(int level) => BallMaterials.GetName(level);
 
         // Mejor calidad de bola = bolas más valiosas pero menos a la vez y lanzadas más despacio
         public static float TierCapacityFactor(int tier) => Mathf.Pow(0.8f, tier);
@@ -168,12 +156,12 @@ namespace Plinko
         // --- Tipos de bola (mejora permanente del lanzador, nunca se compran bolas sueltas) ---
         public static readonly BallTier[] Tiers =
         {
-            new BallTier("Básica",    4,      1,   new Color(0.92f, 0.94f, 1.00f)),
-            new BallTier("Bronce",    32,     3,   new Color(0.85f, 0.55f, 0.32f)),
-            new BallTier("Plata",     256,    9,   new Color(0.80f, 0.85f, 0.92f)),
-            new BallTier("Esmeralda", 2048,   27,  new Color(0.35f, 0.95f, 0.60f)),
-            new BallTier("Rubí",      16384,  81,  new Color(1.00f, 0.35f, 0.45f)),
-            new BallTier("Diamante",  131072, 243, new Color(0.55f, 0.85f, 1.00f)),
+            new BallTier("Normal",    4,      1,   new Color(0.92f, 0.94f, 1.00f)),
+            new BallTier("Pulida",    32,     3,   new Color(0.85f, 0.55f, 0.32f)),
+            new BallTier("Refinada",     256,    9,   new Color(0.80f, 0.85f, 0.92f)),
+            new BallTier("Maestra", 2048,   27,  new Color(0.35f, 0.95f, 0.60f)),
+            new BallTier("Legendaria",      16384,  81,  new Color(1.00f, 0.35f, 0.45f)),
+            new BallTier("Mítica",  131072, 243, new Color(0.55f, 0.85f, 1.00f)),
         };
     }
 }

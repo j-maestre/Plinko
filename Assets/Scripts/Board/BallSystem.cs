@@ -35,6 +35,7 @@ namespace Plinko
             public float SparkTimer;
             public OwnedBall Owner;     // bola del jugador (null = clon o copia temporal)
             public float SizeMul = 1f;  // las de más nivel son algo más grandes
+            public Color Rest = Color.white; // color del SpriteRenderer en reposo (la textura ya trae el color)
         }
 
         const float DropDuration = 0.35f;
@@ -90,9 +91,11 @@ namespace Plinko
             b.IsClone = false;
             b.Value = Balance.BallValue(gm.Stats.TierIndex, level);
             b.SizeMul = Mathf.Min(1.6f, 1f + 0.07f * (level - 1));
-            var color = Balance.LevelColor(level);
+            var color = Balance.LevelColor(level);   // para estela y efectos
             b.BaseColor = color;
-            b.Sr.color = color;
+            b.Sr.sprite = BallMaterials.GetSprite(level);
+            b.Rest = Color.white;
+            b.Sr.color = Color.white;
             b.Path = PathGenerator.WithDrift(board.Rows, (float)gm.Stats.DriftChance);
             b.HaloAlpha = TierHalo(gm.Stats.TierIndex);
             SetGolden(b, gm.Stats.GoldenBallChance > 0 && Random.value < gm.Stats.GoldenBallChance);
@@ -132,17 +135,19 @@ namespace Plinko
         }
 
         /// <summary>Quita del tablero la bola de ese dueño si está cayendo (al fusionar).</summary>
-        public void RemoveFlying(OwnedBall owner)
+        /// <summary>Quita la bola de ese dueño si está cayendo. Devuelve dónde estaba (para el efecto de fusión).</summary>
+        public Vector2? RemoveFlying(OwnedBall owner)
         {
             for (int i = active.Count - 1; i >= 0; i--)
             {
                 if (active[i].Owner != owner) continue;
                 Vector2 pos = active[i].Tr.position;
-                gm.Fx.Burst(pos, active[i].BaseColor, 8, 3f, 0.06f, 0.35f);
+                gm.Fx.Flash(pos, Alpha(active[i].BaseColor, 0.6f), 0.8f, 0.2f);
                 Recycle(i, false);
-                return;
+                return pos;
             }
             owner.InFlight = false;
+            return null;
         }
 
         public void ClearAll()
@@ -209,7 +214,7 @@ namespace Plinko
             if (b.Pulse > 0)
             {
                 b.Pulse = Mathf.Max(0, b.Pulse - dt * 4f);
-                if (b.Pulse <= 0) b.Sr.color = b.BaseColor;
+                if (b.Pulse <= 0) b.Sr.color = b.Rest;
             }
             b.Impact = Mathf.Max(0, b.Impact - dt * 9f);
             b.Spawn = Mathf.Min(1f, b.Spawn + dt * 8f);
@@ -399,7 +404,9 @@ namespace Plinko
             c.SizeMul = parent.SizeMul;
             c.Value = parent.Value;
             c.BaseColor = Color.Lerp(parent.BaseColor, Color.white, 0.4f);
-            c.Sr.color = c.BaseColor;
+            c.Sr.sprite = parent.Sr.sprite;
+            c.Rest = new Color(1f, 1f, 1f, 0.8f);   // el clon, algo translúcido
+            c.Sr.color = c.Rest;
             c.Path = PathGenerator.Reroll(parent.Path, parent.Row, parent.Col, (float)gm.Stats.DriftChance);
             c.Path[parent.Row] = !parent.Path[parent.Row]; // sale hacia el lado contrario
             c.Row = parent.Row;
@@ -511,6 +518,7 @@ namespace Plinko
             if (golden)
             {
                 b.BaseColor = GoldenBallColor;
+                b.Rest = GoldenBallColor;           // tiñe de oro la textura
                 b.Sr.color = GoldenBallColor;
             }
             b.Trail.time = golden ? 0.3f : 0.12f;

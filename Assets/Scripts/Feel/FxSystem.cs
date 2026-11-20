@@ -15,6 +15,8 @@ namespace Plinko
             public Vector2 Pos, Vel;
             public float Life, MaxLife, Size, EndSize, Gravity, Drag;
             public Color Color;
+            public bool Converge;           // viaja de Start a Target (efecto de fusión)
+            public Vector2 Start, Target, Side;
         }
 
         const int MaxParticles = 450;
@@ -74,6 +76,29 @@ namespace Plinko
                 p.Gravity = -12f;
                 p.Drag = 1f;
                 p.Color = color;
+            }
+        }
+
+        /// <summary>Chispas que salen de un punto y vuelan curvándose hasta otro (las bolas "se juntan").</summary>
+        public void Converge(Vector2 from, Vector2 to, Color color, int count, float duration)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                var p = Get(SpriteFactory.Circle, 7);
+                if (p == null) return;
+                p.Converge = true;
+                p.Start = from + Random.insideUnitCircle * 0.25f;
+                p.Target = to;
+                var dir = (to - from).normalized;
+                p.Side = new Vector2(-dir.y, dir.x) * Random.Range(-1.5f, 1.5f);
+                p.Pos = p.Start;
+                p.Vel = Vector2.zero;
+                p.MaxLife = duration * Random.Range(0.85f, 1.05f);
+                p.Size = Random.Range(0.08f, 0.16f);
+                p.EndSize = 0.05f;
+                p.Gravity = 0;
+                p.Drag = 0;
+                p.Color = Color.Lerp(color, Color.white, Random.value * 0.4f);
             }
         }
 
@@ -170,6 +195,7 @@ namespace Plinko
             p.Sr.sprite = sprite;
             p.Sr.sortingOrder = order;
             p.Life = 0;
+            p.Converge = false;
             active.Add(p);
             return p;
         }
@@ -213,9 +239,17 @@ namespace Plinko
                     active.RemoveAt(last);
                     continue;
                 }
-                p.Vel.y += p.Gravity * dt;
-                p.Vel *= 1f / (1f + p.Drag * dt);
-                p.Pos += p.Vel * dt;
+                if (p.Converge)
+                {
+                    float e = t * t;                                   // acelera al acercarse
+                    p.Pos = Vector2.Lerp(p.Start, p.Target, e) + p.Side * Mathf.Sin(t * Mathf.PI) * 0.6f;
+                }
+                else
+                {
+                    p.Vel.y += p.Gravity * dt;
+                    p.Vel *= 1f / (1f + p.Drag * dt);
+                    p.Pos += p.Vel * dt;
+                }
                 p.Sr.transform.localPosition = p.Pos;
                 p.Sr.transform.localScale = Vector3.one * Mathf.Lerp(p.Size, p.EndSize, EaseOut(t));
                 var c = p.Color;

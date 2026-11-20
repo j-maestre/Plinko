@@ -207,6 +207,9 @@ namespace Plinko
                 if (gm.IsVisible(def)) knownUnlocked.Add(def.Id);
             BuildBanner();
             prestigeUI.Init(gm, root); // por encima de todo
+            var info = new GameObject("InfoUI").AddComponent<InfoUI>();
+            info.transform.SetParent(transform, false);
+            info.Init(gm, root);   // tutorial y lista de bolas
 
             shownMoney = gm.Money;
             lastBest = gm.State.bestDrop;
@@ -487,21 +490,83 @@ namespace Plinko
                 var img = rt.gameObject.AddComponent<Image>();
                 img.sprite = SpriteFactory.Sphere;
                 img.raycastTarget = false;
-                var label = UIFactory.Text(UIFactory.Stretch("Lv", rt), "", 26, new Color(0.05f, 0.06f, 0.12f), TextAnchor.MiddleCenter, true);
+                var label = UIFactory.Text(UIFactory.Stretch("Lv", rt), "", 24, Color.white, TextAnchor.MiddleCenter, true);
+                label.gameObject.AddComponent<Outline>().effectColor = new Color(0, 0, 0, 0.75f);
                 tokens.Add((img, label));
             }
 
+            // Comprar: icono de bola de madera con un "+"
             var buyRt = UIFactory.Rect("Buy", row, new Vector2(0.62f, 0.53f), new Vector2(0.97f, 0.96f));
-            buyButton = UIFactory.Button(buyRt, UIFactory.Accent, out buyLabel, "", 30);
+            buyButton = ActionButton(buyRt, BuyColor, "COMPRAR", out buyLabel, out buyPrice, out var buyIcon);
+            buyIconImg = IconBall(buyIcon, new Vector2(0, 0), 46, 1);
+            var plus = UIFactory.Rect("Plus", buyIcon, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            plus.sizeDelta = new Vector2(24, 24);
+            plus.anchoredPosition = new Vector2(17, 15);
+            var plusImg = plus.gameObject.AddComponent<Image>();
+            plusImg.sprite = SpriteFactory.Circle;
+            plusImg.color = new Color(0.25f, 0.9f, 0.5f);
+            plusImg.raycastTarget = false;
+            UIFactory.Text(UIFactory.Stretch("P", plus), "+", 22, Color.white, TextAnchor.MiddleCenter, true);
             buyPunch = Punch.On(buyRt, 0.1f, 0.25f);
             buyButton.onClick.AddListener(() => { if (gm.TryBuyBall()) buyPunch.Play(); });
 
+            // Fusionar: dos bolas pequeñas que se convierten en una mayor
             var mergeRt = UIFactory.Rect("Merge", row, new Vector2(0.62f, 0.06f), new Vector2(0.97f, 0.49f));
-            mergeButton = UIFactory.Button(mergeRt, new Color(0.72f, 0.45f, 1f), out mergeLabel, "", 30);
+            mergeButton = ActionButton(mergeRt, MergeColor, "FUSIONAR", out mergeLabel, out mergePrice, out var mergeIcon);
+            mergeFromA = IconBall(mergeIcon, new Vector2(-16, 10), 26, 1);
+            mergeFromB = IconBall(mergeIcon, new Vector2(-16, -12), 26, 1);
+            mergeTo = IconBall(mergeIcon, new Vector2(14, 0), 40, 2);
             mergePunch = Punch.On(mergeRt, 0.12f, 0.3f);
             mergeButton.onClick.AddListener(() => { if (gm.TryMerge()) { mergePunch.Play(); RefreshDock(); } });
 
             gm.BallsChanged += RefreshDock;
+        }
+
+        static readonly Color BuyColor = new Color(0.16f, 0.55f, 0.48f);
+        static readonly Color MergeColor = new Color(0.42f, 0.26f, 0.70f);
+        Text buyPrice, mergePrice;
+        Image buyIconImg, mergeFromA, mergeFromB, mergeTo;
+
+        /// <summary>
+        /// Botón de acción: fondo con volumen y borde claro, icono a la izquierda en un círculo oscuro,
+        /// título arriba y el precio en una píldora debajo.
+        /// </summary>
+        Button ActionButton(RectTransform rt, Color color, string title, out Text titleText, out Text price, out RectTransform icon)
+        {
+            var border = UIFactory.Stretch("Border", rt);
+            UIFactory.Image(border, Color.Lerp(color, Color.white, 0.45f)).raycastTarget = false;
+            var face = UIFactory.Inset(UIFactory.Stretch("Face", rt), 3, 3, 3, 3);
+            var btn = UIFactory.Button(face, color, out var unused, "", 10);
+            unused.gameObject.SetActive(false);
+
+            var iconBg = UIFactory.Rect("IconBg", face, new Vector2(0, 0.5f), new Vector2(0, 0.5f));
+            iconBg.sizeDelta = new Vector2(64, 64);
+            iconBg.anchoredPosition = new Vector2(42, 0);
+            var bgImg = iconBg.gameObject.AddComponent<Image>();
+            bgImg.sprite = SpriteFactory.Circle;
+            bgImg.color = new Color(0, 0, 0.05f, 0.35f);
+            bgImg.raycastTarget = false;
+            icon = iconBg;
+
+            titleText = UIFactory.Text(UIFactory.Inset(UIFactory.Rect("Title", face, new Vector2(0, 0.5f), new Vector2(1, 1f)), 84, 0, 10, 2),
+                title, 26, Color.white, TextAnchor.LowerLeft, true);
+            UIFactory.AddShadow(titleText, 2f, 0.4f);
+
+            var pill = UIFactory.Inset(UIFactory.Rect("Pill", face, new Vector2(0, 0.08f), new Vector2(1, 0.48f)), 84, 0, 12, 0);
+            UIFactory.Image(pill, new Color(0, 0, 0.05f, 0.35f)).raycastTarget = false;
+            price = UIFactory.Text(UIFactory.Inset(UIFactory.Stretch("Price", pill), 12, 0, 12, 0), "", 22, new Color(1f, 0.9f, 0.55f), TextAnchor.MiddleLeft, true);
+            return btn;
+        }
+
+        Image IconBall(RectTransform parent, Vector2 pos, float size, int level)
+        {
+            var rt = UIFactory.Rect("Ball", parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            rt.sizeDelta = new Vector2(size, size);
+            rt.anchoredPosition = pos;
+            var img = rt.gameObject.AddComponent<Image>();
+            img.sprite = BallMaterials.GetSprite(level);
+            img.raycastTarget = false;
+            return img;
         }
 
         /// <summary>Pinta las bolas ordenadas de mayor a menor nivel y actualiza los botones.</summary>
@@ -520,8 +585,8 @@ namespace Plinko
                 if (!visible) continue;
                 if (i < sortedLevels.Count)
                 {
-                    img.sprite = SpriteFactory.Sphere;
-                    img.color = Balance.LevelColor(sortedLevels[i]);
+                    img.sprite = BallMaterials.GetSprite(sortedLevels[i]);
+                    img.color = Color.white;
                     label.text = sortedLevels[i].ToString();
                 }
                 else
@@ -535,16 +600,21 @@ namespace Plinko
             double cost = inv.BuyCost;
             bool canBuy = inv.HasFreeSlot && gm.Money >= cost;
             buyButton.interactable = canBuy;
-            buyLabel.text = inv.HasFreeSlot
-                ? "+ BOLA  <size=22>" + inv.Count + "/" + slots + "</size>\n<size=24>" + NumberFormat.Money(cost) + "</size>"
-                : "HUECOS LLENOS\n<size=22>fusiona o amplía</size>";
+            buyLabel.text = "COMPRAR  <size=20><color=#BFEFE0>" + inv.Count + "/" + slots + "</color></size>";
+            buyPrice.text = !inv.HasFreeSlot ? "Huecos llenos" : cost <= 0 ? "¡GRATIS!" : NumberFormat.Money(cost);
+            buyIconImg.color = new Color(1, 1, 1, canBuy ? 1f : 0.5f);
 
             int lv = inv.MergeableLevel();
             double mergeCost = inv.MergeCost;
-            mergeButton.interactable = lv > 0 && gm.Money >= mergeCost;
-            mergeLabel.text = lv > 0
-                ? "FUSIONAR  <size=22>Nv" + lv + " → " + (lv + 1) + "</size>\n<size=24>" + NumberFormat.Money(mergeCost) + "</size>"
-                : "FUSIONAR\n<size=22>sin parejas</size>";
+            bool canMerge = lv > 0 && gm.Money >= mergeCost;
+            mergeButton.interactable = canMerge;
+            mergeLabel.text = lv > 0 ? "FUSIONAR  <size=20><color=#E2D0FF>→ " + Balance.LevelName(lv + 1) + "</color></size>" : "FUSIONAR";
+            mergePrice.text = lv > 0 ? NumberFormat.Money(mergeCost) : "Sin parejas";
+            int shown = lv > 0 ? lv : 1;
+            mergeFromA.sprite = mergeFromB.sprite = BallMaterials.GetSprite(shown);
+            mergeTo.sprite = BallMaterials.GetSprite(shown + 1);
+            var tint = new Color(1, 1, 1, canMerge ? 1f : 0.45f);
+            mergeFromA.color = mergeFromB.color = mergeTo.color = tint;
         }
 
         void BuildTabs(RectTransform container)
