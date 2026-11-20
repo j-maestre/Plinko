@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Reflection;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEngine;
 
 namespace Plinko.EditorTools
@@ -32,12 +33,29 @@ namespace Plinko.EditorTools
             PlayerSettings.allowedAutorotateToLandscapeLeft = false;
             PlayerSettings.allowedAutorotateToLandscapeRight = false;
 
+            SetAppIcon();
+
             try { SelectGameViewSize(); }
             catch (Exception e)
             {
                 Debug.Log("No se pudo fijar la resolución de la vista Game automáticamente (" + e.Message +
                           "). Elige 1080x1920 en el desplegable de la vista Game.");
             }
+        }
+
+        const string IconPath = "Assets/Art/AppIcon.png";
+
+        /// <summary>Usa Assets/Art/AppIcon.png como icono por defecto de la app (todas las plataformas).</summary>
+        [MenuItem("Plinko/Aplicar icono de la app")]
+        static void SetAppIcon()
+        {
+            var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(IconPath);
+            if (tex == null) { Debug.LogWarning("No se encuentra " + IconPath); return; }
+            var current = PlayerSettings.GetIcons(NamedBuildTarget.Unknown, IconKind.Any);
+            if (current != null && current.Length > 0 && current[0] == tex) return;
+            PlayerSettings.SetIcons(NamedBuildTarget.Unknown, new[] { tex }, IconKind.Any);
+            AssetDatabase.SaveAssets();
+            Debug.Log("Icono de la app asignado: " + IconPath);
         }
 
         // La API de tamaños de la vista Game es interna: se usa reflexión.
