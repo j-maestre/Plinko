@@ -31,11 +31,12 @@ namespace Plinko
 
 #if PLINKO_ADS && UNITY_ANDROID && !UNITY_EDITOR
         bool loaded;
+        string lastError = "iniciando…";
 
         public void Init()
         {
-            if (!Advertisement.isInitialized && Advertisement.isSupported)
-                Advertisement.Initialize(AndroidGameId, TestMode, this);
+            if (!Advertisement.isSupported) { lastError = "no soportado"; return; }
+            if (!Advertisement.isInitialized) Advertisement.Initialize(AndroidGameId, TestMode, this);
         }
 
         public bool Ready => loaded;
@@ -43,7 +44,14 @@ namespace Plinko
         public void ShowRewarded(Action onReward, Action onFail = null)
         {
             if (Showing) return;
-            if (!loaded) { onFail?.Invoke(); Load(); GameManager.Instance?.UI.ShowBanner("El anuncio aún no está listo, prueba en un momento", Color.gray); return; }
+            if (!loaded)
+            {
+                onFail?.Invoke();
+                if (Advertisement.isInitialized) Load(); else Init();
+                // diagnóstico visible: por qué no hay anuncio
+                GameManager.Instance?.UI.ShowBanner("Anuncio no listo (" + lastError + ")", Color.gray);
+                return;
+            }
             pendingReward = onReward; pendingFail = onFail;
             Showing = true;
             loaded = false;
@@ -52,17 +60,24 @@ namespace Plinko
 
         void Load() => Advertisement.Load(RewardedUnit, this);
 
-        public void OnInitializationComplete() => Load();
-        public void OnInitializationFailed(UnityAdsInitializationError error, string message) => Debug.LogWarning("[Ads] Init: " + message);
-        public void OnUnityAdsAdLoaded(string placementId) => loaded = true;
+        public void OnInitializationComplete() { lastError = "cargando…"; Load(); }
+        public void OnInitializationFailed(UnityAdsInitializationError error, string message)
+        {
+            lastError = "init " + error + ": " + message;
+            Debug.LogWarning("[Ads] Init: " + message);
+        }
+        public void OnUnityAdsAdLoaded(string placementId) { loaded = true; lastError = ""; }
         public void OnUnityAdsFailedToLoad(string placementId, UnityAdsLoadError error, string message)
         {
+            lastError = "carga " + error + ": " + message;
             Debug.LogWarning("[Ads] Load: " + message);
             Invoke(nameof(Load), 10f);
         }
         public void OnUnityAdsShowFailure(string placementId, UnityAdsShowError error, string message)
         {
             Showing = false;
+            lastError = "mostrar " + error + ": " + message;
+            GameManager.Instance?.UI.ShowBanner("Anuncio falló (" + lastError + ")", Color.gray);
             var f = pendingFail; pendingReward = pendingFail = null;
             f?.Invoke();
             Load();

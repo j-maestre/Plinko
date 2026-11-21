@@ -682,13 +682,13 @@ namespace Plinko
             var btn = UIFactory.Button(rt, AdColor, out var label, text, size);
             label.color = new Color(0.2f, 0.1f, 0f);
             var icon = UIFactory.Rect("Play", rt, new Vector2(0, 0.5f), new Vector2(0, 0.5f));
-            icon.sizeDelta = new Vector2(30, 30);
-            icon.anchoredPosition = new Vector2(24, 0);
+            icon.sizeDelta = new Vector2(24, 24);
+            icon.anchoredPosition = new Vector2(20, 0);
             var img = icon.gameObject.AddComponent<Image>();
             img.sprite = AdsService.PlayIcon;
             img.color = new Color(0.2f, 0.1f, 0f);
             img.raycastTarget = false;
-            label.rectTransform.offsetMin = new Vector2(38, 0);
+            label.rectTransform.offsetMin = new Vector2(30, 0);
             btn.onClick.AddListener(() => { gm.Audio.Click(); onClick(); });
             rt.gameObject.SetActive(false);
             return rt.gameObject;
@@ -698,20 +698,20 @@ namespace Plinko
         {
             // "GRATIS" sobre los botones de comprar y fusionar
             var b = UIFactory.Rect("AdBuy", buyButton.transform, new Vector2(1, 1), new Vector2(1, 1));
-            b.sizeDelta = new Vector2(150, 46);
-            b.anchoredPosition = new Vector2(-70, 6);
-            adBuy = AdPill(b, "GRATIS", 22, gm.WatchAdBuy);
+            b.sizeDelta = new Vector2(128, 38);
+            b.anchoredPosition = new Vector2(-58, 14);
+            adBuy = AdPill(b, "GRATIS", 18, gm.WatchAdBuy);
             var m = UIFactory.Rect("AdMerge", mergeButton.transform, new Vector2(1, 1), new Vector2(1, 1));
-            m.sizeDelta = new Vector2(150, 46);
-            m.anchoredPosition = new Vector2(-70, 6);
-            adMerge = AdPill(m, "GRATIS", 22, gm.WatchAdMerge);
+            m.sizeDelta = new Vector2(128, 38);
+            m.anchoredPosition = new Vector2(-58, 14);
+            adMerge = AdPill(m, "GRATIS", 18, gm.WatchAdMerge);
 
             // Avalancha y Sobrecarga por anuncio, arriba a la izquierda del tablero
             float top = BoardView.TopEdge - BoardView.TopUI - BoardView.OverloadBar;
-            var r = UIFactory.Rect("AdRush", root, new Vector2(0.03f, top - 0.072f), new Vector2(0.36f, top - 0.038f));
-            adRush = AdPill(r, "AVALANCHA", 24, gm.WatchAdRush);
-            var o = UIFactory.Rect("AdOverload", root, new Vector2(0.03f, top - 0.112f), new Vector2(0.36f, top - 0.078f));
-            adOverload = AdPill(o, "SOBRECARGA", 24, gm.WatchAdOverload);
+            var r = UIFactory.Rect("AdRush", root, new Vector2(0.03f, top - 0.062f), new Vector2(0.29f, top - 0.036f));
+            adRush = AdPill(r, "AVALANCHA", 20, gm.WatchAdRush);
+            var o = UIFactory.Rect("AdOverload", root, new Vector2(0.03f, top - 0.094f), new Vector2(0.29f, top - 0.068f));
+            adOverload = AdPill(o, "SOBRECARGA", 20, gm.WatchAdOverload);
 
             // x3 de la estrella fugaz
             starOfferRt = UIFactory.Rect("StarOffer", root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
