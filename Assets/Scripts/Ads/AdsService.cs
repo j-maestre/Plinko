@@ -18,7 +18,7 @@ namespace Plinko
 #endif
     {
         public const string AndroidGameId = "800447745";
-        const string RewardedUnit = "Rewarded_Android";
+        const string RewardedUnit = "BP_Rewarded_Android";   // ID del placement en el panel de Unity
         /// <summary>Anuncios de prueba (no generan dinero). Ponlo a false al publicar en serio.</summary>
         public const bool TestMode = true;
 
