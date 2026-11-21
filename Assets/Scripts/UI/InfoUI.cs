@@ -14,7 +14,7 @@ namespace Plinko
         {
             ("¡Bienvenido a Plinko!", "Tus bolas caen solas por el tablero. Cada rebote en un pincho da dinero, y el cubo en el que caen lo multiplica."),
             ("Compra bolas", "Pulsa COMPRAR para añadir una bola de madera: empiezas con el dinero justo para la primera. Cada bola ocupa un hueco: amplía huecos en la pestaña Bolas."),
-            ("Fusiona", "FUSIONAR junta tus dos bolas iguales de mayor nivel en una de un material mejor, que vale mucho más: madera → bronce → plata → hierro…"),
+            ("Fusiona", "FUSIONAR junta tus dos bolas iguales de mayor nivel en una de un material mejor, que vale mucho más: madera » bronce » plata » hierro…"),
             ("Mejora", "En las pestañas de abajo mejoras huecos, velocidad de caída, pinchos y más. Las mejoras con \"???\" se descubren al avanzar."),
             ("Momentos especiales", "Llena la barra de SOBRECARGA rebotando para multiplicar todo. Y de vez en cuando, una bola desatará la AVALANCHA."),
             ("Prestigio", "Con mucho dinero podrás reiniciar en PRESTIGIO a cambio de lingotes de oro: desbloquean secciones nuevas y mejoras permanentes."),

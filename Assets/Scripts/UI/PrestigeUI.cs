@@ -17,6 +17,7 @@ namespace Plinko
             public PrestigeDef Def;
             public Text Level, Effect, Cost;
             public Image CostIcon;
+            public Image Glow;
             public Button Button;
             public Punch Punch;
         }
@@ -106,6 +107,7 @@ namespace Plinko
             UIFactory.Text(shopTitle, "TIENDA PERMANENTE", 28, new Color(1f, 0.85f, 0.55f), TextAnchor.MiddleLeft, true);
             BuildShop(UIFactory.Rect("Shop", card, new Vector2(0.03f, 0.07f), new Vector2(0.97f, 0.415f)));
             BuildVictory(canvasRoot);
+            BuildAdOffer(canvasRoot);
             gm.SummitReached += ShowVictory;
 
             // Borrar la partida entera (también lingotes y tienda). Doble toque para confirmar.
@@ -118,6 +120,53 @@ namespace Plinko
 
             gm.UpgradesChanged += Refresh;
             panel.gameObject.SetActive(false);
+        }
+
+        // ---------------------------------------------------------------- Doblar lingotes con anuncio
+        RectTransform adOffer;
+        Text adOfferText, adOfferButtonLabel;
+        double adOfferAmount;
+
+        void BuildAdOffer(RectTransform canvasRoot)
+        {
+            adOffer = UIFactory.Stretch("AdOffer", canvasRoot);
+            UIFactory.Image(adOffer, new Color(0, 0, 0.03f, 0.8f), false);
+            adOffer.gameObject.AddComponent<Button>().transition = Selectable.Transition.None;
+            var card = UIFactory.Rect("Card", adOffer, new Vector2(0.08f, 0.38f), new Vector2(0.92f, 0.62f));
+            UIFactory.Image(card, UIFactory.Panel);
+            Ingot(UIFactory.Rect("IngotHolder", card, new Vector2(0.5f, 0.82f), new Vector2(0.5f, 0.82f)), new Vector2(-64, 0), 2f);
+            adOfferText = UIFactory.Text(UIFactory.Rect("Text", card, new Vector2(0.05f, 0.45f), new Vector2(0.95f, 0.68f)),
+                "", 38, UIFactory.TextMain, TextAnchor.MiddleCenter, true);
+            var yes = UIFactory.Rect("Yes", card, new Vector2(0.12f, 0.2f), new Vector2(0.88f, 0.4f));
+            var btn = UIFactory.Button(yes, new Color(1f, 0.72f, 0.18f), out adOfferButtonLabel, "", 32);
+            adOfferButtonLabel.color = new Color(0.2f, 0.1f, 0f);
+            btn.onClick.AddListener(() =>
+            {
+                adOffer.gameObject.SetActive(false);
+                double extra = adOfferAmount;
+                gm.Ads.ShowRewarded(() =>
+                {
+                    gm.State.cores += extra;
+                    gm.Save();
+                    coresPunch.Play(1.5f);
+                    gm.UI.ShowBanner("¡Lingotes doblados!  +" + NumberFormat.Format(extra), CoreColor);
+                    gm.Audio.Record();
+                    Refresh();
+                });
+            });
+            var no = UIFactory.Rect("No", card, new Vector2(0.3f, 0.04f), new Vector2(0.7f, 0.17f));
+            UIFactory.Button(no, UIFactory.CardDarkColor, out _, "No, gracias", 26).onClick.AddListener(() => adOffer.gameObject.SetActive(false));
+            adOffer.gameObject.SetActive(false);
+        }
+
+        void ShowAdOffer(double gained)
+        {
+            if (gained <= 0) return;
+            adOfferAmount = gained;
+            adOfferText.text = "¿Doblar tus lingotes?";
+            adOfferButtonLabel.text = "VER ANUNCIO  +" + NumberFormat.Format(gained);
+            adOffer.gameObject.SetActive(true);
+            adOffer.SetAsLastSibling();
         }
 
         // ---------------------------------------------------------------- La Cima (meta final)
@@ -266,6 +315,12 @@ namespace Plinko
                     "", 24, UIFactory.TextMain, TextAnchor.MiddleLeft);
 
                 var btnRt = UIFactory.Rect("Buy", body, new Vector2(0.70f, 0.18f), new Vector2(0.965f, 0.82f));
+                var glowRt = UIFactory.Rect("Glow", body, btnRt.anchorMin, btnRt.anchorMax);
+                UIFactory.Inset(glowRt, -10, -10, -10, -10);
+                row.Glow = UIFactory.Image(glowRt, CoreColor);
+                row.Glow.raycastTarget = false;
+                row.Glow.enabled = false;
+                glowRt.SetSiblingIndex(btnRt.GetSiblingIndex());
                 row.Button = UIFactory.Button(btnRt, CoreColor, out row.Cost, "", 34);
                 // precio: lingote + número
                 row.CostIcon = Ingot(btnRt, new Vector2(48, 0), 0.75f);
@@ -307,6 +362,7 @@ namespace Plinko
                 coresPunch.Play(1.5f);
                 gm.UI.ShowBanner("¡Prestigio!  +" + NumberFormat.Format(gained) + " lingotes", CoreColor);
                 Refresh();
+                ShowAdOffer(gained);
             }
             else
             {
@@ -352,8 +408,11 @@ namespace Plinko
                 bool max = lvl >= row.Def.MaxLevel;
                 double cost = row.Def.CostAt(lvl);
                 row.Level.text = lvl.ToString();
-                row.Effect.text = max ? row.Def.Effect(lvl) : row.Def.Effect(lvl) + "  <color=#" + hex + ">→  " + row.Def.Effect(lvl + 1) + "</color>";
-                row.Cost.text = max ? "MÁX" : NumberFormat.Format(cost);
+                row.Effect.text = max ? row.Def.Effect(lvl) : row.Def.Effect(lvl) + "  <color=#" + hex + ">»  " + row.Def.Effect(lvl + 1) + "</color>";
+                bool can = !max && s.cores >= cost;
+                row.Cost.text = max ? "MÁX" : can ? "<size=20>COMPRAR</size>\n" + NumberFormat.Format(cost) : NumberFormat.Format(cost) + "\n<size=18>faltan " + NumberFormat.Format(cost - s.cores) + "</size>";
+                row.Glow.enabled = can;
+                if (can) row.Glow.color = new Color(CoreColor.r, CoreColor.g, CoreColor.b, 0.25f + 0.25f * Mathf.Sin(Time.unscaledTime * 5f));
                 row.CostIcon.enabled = !max;
                 row.CostIcon.color = new Color(1, 1, 1, s.cores >= cost ? 1f : 0.55f);
                 var lrt = row.Cost.rectTransform;

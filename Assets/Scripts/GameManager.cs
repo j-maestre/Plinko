@@ -43,7 +43,6 @@ namespace Plinko
         /// <summary>Multiplicador de valor de las bolas durante la Avalancha (el del cubo donde cayó la bola brillante).</summary>
         public double RushMultiplier { get; private set; } = 1;
         public AvalancheIntro Intro { get; private set; }
-        float pendingTime;
         public float RushTimeLeft { get; private set; }
         float rushTimer;
 
@@ -62,6 +61,44 @@ namespace Plinko
         readonly Dictionary<string, int> prestigeLevels = new Dictionary<string, int>();
         public event Action Prestiged;
         public event Action SummitReached;
+
+        // ---------------------------------------------------------------- Anuncios recompensados
+        public AdsService Ads { get; private set; }
+        public const float AdSmallCooldown = 60f;    // comprar / fusionar gratis
+        public const float AdEventCooldown = 240f;   // Avalancha / Sobrecarga
+        float adBuyCd, adMergeCd, adRushCd, adOverloadCd;
+
+        bool EventsIdle => !InRush && !RushPending && !InOverload && (Intro == null || !Intro.Playing);
+        public bool AdBuyAvailable => adBuyCd <= 0 && !ShopLocked && Inventory.HasFreeSlot;
+        public bool AdMergeAvailable => adMergeCd <= 0 && !ShopLocked && Inventory.MergeableLevel() > 0;
+        public bool AdRushAvailable => adRushCd <= 0 && EventsIdle && Inventory.Count > 0;
+        public bool AdOverloadAvailable => adOverloadCd <= 0 && EventsIdle && Inventory.Count > 0;
+
+        public void WatchAdBuy() => Ads.ShowRewarded(() => { if (TryBuyBall(true)) adBuyCd = AdSmallCooldown; });
+        public void WatchAdMerge() => Ads.ShowRewarded(() => { if (TryMerge(true)) adMergeCd = AdSmallCooldown; });
+        public void WatchAdRush() => Ads.ShowRewarded(() => { if (EventsIdle) { BeginRushBall(); adRushCd = AdEventCooldown; } });
+        public void WatchAdOverload() => Ads.ShowRewarded(() => { if (EventsIdle) { StartOverload(); adOverloadCd = AdEventCooldown; } });
+
+        void TickAdCooldowns(float dt)
+        {
+            adBuyCd -= dt; adMergeCd -= dt; adRushCd -= dt; adOverloadCd -= dt;
+        }
+
+        /// <summary>Hay algo que comprar con lingotes ahora mismo (mejora de la tienda o sección nueva).</summary>
+        public bool CanBuyAnyPrestige
+        {
+            get
+            {
+                foreach (var def in PrestigeCatalog.All)
+                {
+                    int lvl = GetPrestigeLevel(def.Id);
+                    if (lvl < def.MaxLevel && State.cores >= def.CostAt(lvl)) return true;
+                }
+                foreach (UpgradeCategory c in System.Enum.GetValues(typeof(UpgradeCategory)))
+                    if (IsTabNextToUnlock(c) && State.cores >= Balance.TabUnlockCost(c)) return true;
+                return false;
+            }
+        }
 
         public bool CanReachSummit => !State.summitReached && State.money >= PrestigeBalance.SummitCost;
 
@@ -154,6 +191,9 @@ namespace Plinko
 
             Intro = new GameObject("AvalancheIntro").AddComponent<AvalancheIntro>();
             Intro.transform.SetParent(transform, false);
+            Ads = new GameObject("Ads").AddComponent<AdsService>();
+            Ads.transform.SetParent(transform, false);
+            Ads.Init();
             var star = new GameObject("ShootingStar").AddComponent<ShootingStar>();
             star.transform.SetParent(transform, false);
             star.Init(this);
@@ -182,6 +222,7 @@ namespace Plinko
         {
             float dt = Time.deltaTime;
             manualCooldown -= dt;
+            TickAdCooldowns(Time.unscaledDeltaTime);
             if (Board != null) Board.Focus = ShopLocked;   // tablero algo más grande durante los eventos
             income.Tick(dt);
             UpdateOverload(dt);
@@ -245,9 +286,9 @@ namespace Plinko
         }
         // --- Bolas: comprar y fusionar ---
 
-        public bool TryBuyBall()
+        public bool TryBuyBall(bool free = false)
         {
-            if (ShopLocked || !Inventory.TryBuy()) return false;
+            if (ShopLocked || !Inventory.TryBuy(free)) return false;
             Audio.Buy();
             BallsChanged?.Invoke();
             MoneyChanged?.Invoke();
@@ -255,9 +296,9 @@ namespace Plinko
         }
 
         /// <summary>Fusiona las dos bolas de mayor nivel. Si estaban cayendo desaparecen y la nueva cae desde arriba.</summary>
-        public bool TryMerge()
+        public bool TryMerge(bool free = false)
         {
-            if (ShopLocked || !Inventory.TryMerge(out var result, out var consumed)) return false;
+            if (ShopLocked || !Inventory.TryMerge(out var result, out var consumed, free)) return false;
             var a = Balls.RemoveFlying(consumed);
             var b = Balls.RemoveFlying(result);
             StartCoroutine(MergeSequence(result, a, b));
@@ -450,7 +491,6 @@ namespace Plinko
         void BeginRushBall()
         {
             RushPending = true;
-            pendingTime = 0;
             Balls.LaunchRushBall();
         }
 

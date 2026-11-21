@@ -25,6 +25,7 @@ namespace Plinko
             public Text NvLabel;
             public bool Locked;
             public bool Shown;
+            public Image Glow;   // halo que late cuando se puede comprar
         }
 
         class Tab
@@ -212,6 +213,7 @@ namespace Plinko
             info.transform.SetParent(transform, false);
             info.Init(gm, root);   // tutorial y lista de bolas
             BuildTutorialArrow();
+            BuildAdButtons();
 
             shownMoney = gm.Money;
             lastBest = gm.State.bestDrop;
@@ -285,6 +287,13 @@ namespace Plinko
                 prestigeValue.text = "+" + NumberFormat.Format(gain) + " lingotes";
                 prestigePulse -= dt;
                 if (prestigePulse <= 0) { prestigePulse = 1.2f; prestigePunch.Play(0.6f); } // llama la atención
+            }
+            else if (gm.CanBuyAnyPrestige && !gm.ShopLocked)
+            {
+                // hay lingotes para una mejora (p. ej. calidad de bola): que se note
+                prestigeValue.text = "<color=#7CE38C>¡MEJORA!</color>";
+                prestigePulse -= dt;
+                if (prestigePulse <= 0) { prestigePulse = 1.5f; prestigePunch.Play(0.5f); }
             }
             else
             {
@@ -660,6 +669,93 @@ namespace Plinko
         static readonly Color MergeColor = new Color(0.42f, 0.26f, 0.70f);
         Text buyPrice, mergePrice;
         Image buyIconImg, mergeFromA, mergeFromB, mergeTo;
+        GameObject adBuy, adMerge, adRush, adOverload, starOffer;
+        RectTransform starOfferRt;
+        Vector2 starOfferWorld;
+        double starOfferAmount;
+        float starOfferTime;
+        static readonly Color AdColor = new Color(1f, 0.72f, 0.18f);
+
+        /// <summary>Pastilla "▶ texto" para ver un anuncio recompensado.</summary>
+        GameObject AdPill(RectTransform rt, string text, int size, System.Action onClick)
+        {
+            var btn = UIFactory.Button(rt, AdColor, out var label, text, size);
+            label.color = new Color(0.2f, 0.1f, 0f);
+            var icon = UIFactory.Rect("Play", rt, new Vector2(0, 0.5f), new Vector2(0, 0.5f));
+            icon.sizeDelta = new Vector2(30, 30);
+            icon.anchoredPosition = new Vector2(24, 0);
+            var img = icon.gameObject.AddComponent<Image>();
+            img.sprite = AdsService.PlayIcon;
+            img.color = new Color(0.2f, 0.1f, 0f);
+            img.raycastTarget = false;
+            label.rectTransform.offsetMin = new Vector2(38, 0);
+            btn.onClick.AddListener(() => { gm.Audio.Click(); onClick(); });
+            rt.gameObject.SetActive(false);
+            return rt.gameObject;
+        }
+
+        void BuildAdButtons()
+        {
+            // "GRATIS" sobre los botones de comprar y fusionar
+            var b = UIFactory.Rect("AdBuy", buyButton.transform, new Vector2(1, 1), new Vector2(1, 1));
+            b.sizeDelta = new Vector2(150, 46);
+            b.anchoredPosition = new Vector2(-70, 6);
+            adBuy = AdPill(b, "GRATIS", 22, gm.WatchAdBuy);
+            var m = UIFactory.Rect("AdMerge", mergeButton.transform, new Vector2(1, 1), new Vector2(1, 1));
+            m.sizeDelta = new Vector2(150, 46);
+            m.anchoredPosition = new Vector2(-70, 6);
+            adMerge = AdPill(m, "GRATIS", 22, gm.WatchAdMerge);
+
+            // Avalancha y Sobrecarga por anuncio, arriba a la izquierda del tablero
+            float top = BoardView.TopEdge - BoardView.TopUI - BoardView.OverloadBar;
+            var r = UIFactory.Rect("AdRush", root, new Vector2(0.03f, top - 0.072f), new Vector2(0.36f, top - 0.038f));
+            adRush = AdPill(r, "AVALANCHA", 24, gm.WatchAdRush);
+            var o = UIFactory.Rect("AdOverload", root, new Vector2(0.03f, top - 0.112f), new Vector2(0.36f, top - 0.078f));
+            adOverload = AdPill(o, "SOBRECARGA", 24, gm.WatchAdOverload);
+
+            // x3 de la estrella fugaz
+            starOfferRt = UIFactory.Rect("StarOffer", root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            starOfferRt.sizeDelta = new Vector2(170, 56);
+            starOffer = AdPill(starOfferRt, "x3", 30, () =>
+            {
+                starOffer.SetActive(false);
+                double extra = starOfferAmount * 2;
+                gm.Ads.ShowRewarded(() =>
+                {
+                    gm.GrantBonus(extra);
+                    ShowBanner("¡Estrella x3!  +" + NumberFormat.Money(extra), AdColor);
+                    gm.Audio.Record();
+                });
+            });
+        }
+
+        /// <summary>Tras tocar la estrella: durante unos segundos se ofrece triplicar el premio con un anuncio.</summary>
+        public void ShowStarOffer(Vector2 world, double amount)
+        {
+            starOfferWorld = world;
+            starOfferAmount = amount;
+            starOfferTime = 5f;
+            starOffer.SetActive(true);
+            starOfferRt.SetAsLastSibling();
+        }
+
+        void UpdateAdButtons(float dt)
+        {
+            if (adBuy == null) return;
+            Toggle(adBuy, gm.AdBuyAvailable);
+            Toggle(adMerge, gm.AdMergeAvailable);
+            Toggle(adRush, gm.AdRushAvailable && !prestigeUI.IsOpen);
+            Toggle(adOverload, gm.AdOverloadAvailable && !prestigeUI.IsOpen);
+            if (starOffer.activeSelf)
+            {
+                starOfferTime -= dt;
+                if (starOfferTime <= 0) starOffer.SetActive(false);
+                starOfferRt.anchoredPosition = WorldToCanvas(starOfferWorld) + Vector2.down * 90f;
+                starOfferRt.localScale = Vector3.one * (1f + 0.06f * Mathf.Sin(Time.unscaledTime * 8f));
+            }
+        }
+
+        static void Toggle(GameObject go, bool on) { if (go.activeSelf != on) go.SetActive(on); }
         CanvasGroup bottomGroup;
         Punch buyIconPunch;
 
@@ -772,7 +868,7 @@ namespace Plinko
             double mergeCost = inv.MergeCost;
             bool canMerge = lv > 0 && gm.Money >= mergeCost;
             mergeButton.interactable = canMerge;
-            mergeLabel.text = lv > 0 ? "FUSIONAR  <size=20><color=#E2D0FF>→ " + Balance.LevelName(lv + 1) + "</color></size>" : "FUSIONAR";
+            mergeLabel.text = lv > 0 ? "FUSIONAR  <size=20><color=#E2D0FF>» " + Balance.LevelName(lv + 1) + "</color></size>" : "FUSIONAR";
             // sin parejas: precio de la próxima fusión probable (dos bolas del nivel que se compra),
             // con el botón desactivado hasta que haya pareja
             int shown = lv > 0 ? lv : inv.BuyLevel;
@@ -912,10 +1008,17 @@ namespace Plinko
 
             // Botón de compra con barra de progreso hacia el coste
             var btnRt = UIFactory.Rect("Buy", body, new Vector2(0.70f, 0.18f), new Vector2(0.965f, 0.82f));
+            // halo detrás del botón: solo se ve (latiendo) cuando la mejora se puede comprar
+            var glowRt = UIFactory.Rect("Glow", body, btnRt.anchorMin, btnRt.anchorMax);
+            UIFactory.Inset(glowRt, -10, -10, -10, -10);
+            row.Glow = UIFactory.Image(glowRt, cat);
+            row.Glow.raycastTarget = false;
+            row.Glow.enabled = false;
+            glowRt.SetSiblingIndex(btnRt.GetSiblingIndex());
             row.Button = UIFactory.Button(btnRt, cat, out row.Cost, "", 34);
             row.Fill = UIFactory.Rect("Fill", btnRt, Vector2.zero, new Vector2(0, 1));
             row.Fill.SetSiblingIndex(0);
-            UIFactory.Image(row.Fill, new Color(cat.r, cat.g, cat.b, 0.35f)).raycastTarget = false;
+            UIFactory.Image(row.Fill, new Color(1f, 1f, 1f, 0.10f)).raycastTarget = false;
             row.ButtonPunch = Punch.On(btnRt, 0.12f, 0.25f);
             row.Button.onClick.AddListener(() =>
             {
@@ -942,7 +1045,7 @@ namespace Plinko
             row.Name.text = locked ? "???" : row.Def.Name;
             row.Name.color = locked ? LockedColor : UIFactory.TextMain;
             row.Body.color = locked ? UIFactory.CardDarkColor : UIFactory.CardColor;
-            row.Fill.GetComponent<Image>().color = new Color(c.r, c.g, c.b, 0.35f);
+            row.Fill.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.10f);
             if (!locked) row.Desc.text = row.Def.Desc ?? "";
         }
 
@@ -1128,9 +1231,14 @@ namespace Plinko
                 row.Level.text = def.Shown(lvl).ToString();
                 row.Effect.text = max
                     ? def.Effect(lvl)
-                    : def.Effect(lvl) + "  <color=#" + catHex + ">→  " + def.Effect(def.NextLevel(lvl)) + "</color>";
-                row.Cost.text = max ? "MÁX" : NumberFormat.Money(cost);
+                    : def.Effect(lvl) + "  <color=#" + catHex + ">»  " + def.Effect(def.NextLevel(lvl)) + "</color>";
+                // disponible: "MEJORAR" + precio y halo que late; no disponible: gris con lo que falta
+                if (max) row.Cost.text = "MÁX";
+                else if (canBuy) row.Cost.text = "<size=22>MEJORAR</size>\n" + NumberFormat.Money(cost);
+                else row.Cost.text = NumberFormat.Money(cost) + "\n<size=20>faltan " + NumberFormat.Money(cost - gm.Money) + "</size>";
                 row.Button.interactable = canBuy;
+                row.Glow.enabled = canBuy;
+                if (canBuy) row.Glow.color = new Color(row.Cat.r, row.Cat.g, row.Cat.b, 0.25f + 0.25f * Mathf.Sin(Time.unscaledTime * 5f));
                 float progress = max ? 0f : (float)System.Math.Min(1.0, gm.Money / cost);
                 row.Fill.gameObject.SetActive(!canBuy && !max && progress > 0.02f);
                 SetFill(row.Fill, progress);
@@ -1188,6 +1296,8 @@ namespace Plinko
 
             foreach (var row in rows)
             {
+                if (row.Glow != null && row.Glow.enabled)   // latido suave cada frame
+                    row.Glow.color = new Color(row.Cat.r, row.Cat.g, row.Cat.b, 0.25f + 0.25f * Mathf.Sin(Time.unscaledTime * 5f));
                 if (row.Flash <= 0) continue;
                 row.Flash = Mathf.Max(0, row.Flash - dt * 3f);
                 row.Body.color = Color.Lerp(UIFactory.CardColor, Color.Lerp(UIFactory.CardColor, row.Cat, 0.5f), row.Flash);
@@ -1195,6 +1305,7 @@ namespace Plinko
 
             UpdateOverloadBar(dt);
             UpdateTutorial(dt);
+            UpdateAdButtons(dt);
             RefreshPrestigeChip(dt);
             UpdateRush(dt);
             UpdateBanner(dt);

@@ -30,12 +30,13 @@ namespace Plinko
         };
 
         static Font font;
+        static bool CustomFont;
         /// <summary>Pon un .ttf en Assets/Resources/Fonts/UI.ttf para cambiar la fuente de todo el juego.</summary>
         public static Font Font
         {
             get
             {
-                if (font == null) font = Resources.Load<Font>("Fonts/UI");
+                if (font == null) { font = Resources.Load<Font>("Fonts/UI"); CustomFont = font != null; }
                 if (font == null) font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
                 return font;
             }
@@ -94,7 +95,8 @@ namespace Plinko
             t.fontSize = size;
             t.color = color;
             t.alignment = align;
-            t.fontStyle = bold ? FontStyle.Bold : FontStyle.Normal;
+            // la fuente del juego (Lilita One) ya es gruesa: la negrita sintética solo se usa con la fuente por defecto
+            t.fontStyle = bold && !CustomFont ? FontStyle.Bold : FontStyle.Normal;
             t.supportRichText = true;
             t.raycastTarget = false;
             t.horizontalOverflow = HorizontalWrapMode.Overflow;

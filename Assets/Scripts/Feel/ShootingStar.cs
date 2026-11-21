@@ -118,6 +118,7 @@ namespace Plinko
             gm.Board.Shake(0.3f);
             gm.Audio.Record();
             gm.UI.Popup(p + Vector2.up * 0.4f, "¡ESTRELLA!  +" + NumberFormat.Money(amount), StarColor, 1.3f);
+            gm.UI.ShowStarOffer(p, amount);   // x3 viendo un anuncio
         }
 
         void Miss()

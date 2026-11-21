@@ -85,11 +85,15 @@ namespace Plinko
         public double BuyCost => Balance.BallCost(gm.State.ballsBought, BuyLevel);
         public bool HasFreeSlot => owned.Count < gm.Stats.MaxBalls;
 
-        public bool TryBuy()
+        /// <param name="free">Por anuncio: no cobra ni encarece la siguiente compra.</param>
+        public bool TryBuy(bool free = false)
         {
-            if (!HasFreeSlot || gm.State.money < BuyCost) return false;
-            gm.State.money -= BuyCost;
-            gm.State.ballsBought++;
+            if (!HasFreeSlot || (!free && gm.State.money < BuyCost)) return false;
+            if (!free)
+            {
+                gm.State.money -= BuyCost;
+                gm.State.ballsBought++;
+            }
             int level = BuyLevel;
             Add(new OwnedBall { Level = level });
             if (gm.State.maxLevel < level) gm.State.maxLevel = level;
@@ -129,12 +133,12 @@ namespace Plinko
             }
         }
 
-        public bool TryMerge(out OwnedBall result, out OwnedBall consumed)
+        public bool TryMerge(out OwnedBall result, out OwnedBall consumed, bool free = false)
         {
             result = consumed = null;
             int level = MergeableLevel();
             if (level == 0) return false;
-            double cost = Balance.MergeCost(gm.Stats.TierIndex, level + 1);
+            double cost = free ? 0 : Balance.MergeCost(gm.Stats.TierIndex, level + 1);
             if (gm.State.money < cost) return false;
             gm.State.money -= cost;
             foreach (var b in owned)

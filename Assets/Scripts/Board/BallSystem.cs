@@ -298,10 +298,9 @@ namespace Plinko
             }
             else
             {
-                float stretch = Mathf.Clamp(vel.magnitude * 0.035f, 0f, 0.3f);
-                float ang = vel.sqrMagnitude > 0.0001f ? Mathf.Atan2(vel.y, vel.x) * Mathf.Rad2Deg - 90f : 0f;
-                b.Tr.localRotation = Quaternion.Euler(0, 0, ang);
-                b.Tr.localScale = new Vector3(size * (1f - stretch * 0.5f), size * (1f + stretch), 1);
+                // las bolas no se estiran con la velocidad: siempre esferas
+                b.Tr.localRotation = Quaternion.identity;
+                b.Tr.localScale = new Vector3(size, size, 1);
             }
             b.Shine.position = (Vector3)pos + new Vector3(-0.28f, 0.3f, 0) * size;
             b.Shine.rotation = Quaternion.identity;
