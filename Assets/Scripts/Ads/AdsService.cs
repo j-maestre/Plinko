@@ -1,26 +1,22 @@
 using System;
+using System.Collections.Concurrent;
 using UnityEngine;
 using UnityEngine.UI;
-#if PLINKO_ADS && UNITY_ANDROID && !UNITY_EDITOR
-using UnityEngine.Advertisements;
+#if PLINKO_LEVELPLAY && UNITY_ANDROID && !UNITY_EDITOR
+using Unity.Services.LevelPlay;
 #endif
 
 namespace Plinko
 {
     /// <summary>
     /// Anuncios recompensados (solo los que el jugador elige ver a cambio de un premio).
-    /// En el móvil con el paquete de Unity Ads usa anuncios reales; en el editor o sin paquete,
-    /// muestra un anuncio simulado de 2 segundos para poder probarlo todo.
+    /// En el móvil con el paquete LevelPlay (Ads Mediation) usa anuncios reales; en el editor o sin
+    /// paquete, muestra un anuncio simulado de 2 segundos para poder probarlo todo.
     /// </summary>
     public class AdsService : MonoBehaviour
-#if PLINKO_ADS && UNITY_ANDROID && !UNITY_EDITOR
-        , IUnityAdsInitializationListener, IUnityAdsLoadListener, IUnityAdsShowListener
-#endif
     {
-        public const string AndroidGameId = "800447745";
-        const string RewardedUnit = "Rewarded_Android";   // placement sin pujas ("BP_" exige adMarkup de LevelPlay)
-        /// <summary>Anuncios de prueba (no generan dinero). Ponlo a false al publicar en serio.</summary>
-        public const bool TestMode = true;
+        public const string LevelPlayAppKey = "29c3ebebd";
+        const string RewardedAdUnitId = "muy6u8l1wu0c3mqa";   // "Rewarded_Android" en LevelPlay
 
         Action pendingReward, pendingFail;
         public bool Showing { get; private set; }
@@ -29,68 +25,100 @@ namespace Plinko
         /// <summary>Icono de "ver anuncio" (triángulo de play blanco).</summary>
         public static Sprite PlayIcon => playIcon != null ? playIcon : (playIcon = MakePlayIcon());
 
-#if PLINKO_ADS && UNITY_ANDROID && !UNITY_EDITOR
-        bool loaded;
+#if PLINKO_LEVELPLAY && UNITY_ANDROID && !UNITY_EDITOR
+        LevelPlayRewardedAd ad;
+        bool initStarted, initDone, rewarded, closedPending;
+        float closedTimer;
         string lastError = "iniciando…";
+        // los avisos de LevelPlay llegan desde el hilo de Java: se encolan y se procesan en Update
+        readonly ConcurrentQueue<Action> mainThread = new ConcurrentQueue<Action>();
 
         public void Init()
         {
-            if (!Advertisement.isSupported) { lastError = "no soportado"; return; }
-            if (!Advertisement.isInitialized) Advertisement.Initialize(AndroidGameId, TestMode, this);
+            if (initStarted) return;
+            initStarted = true;
+            LevelPlay.OnInitSuccess += _ => mainThread.Enqueue(OnInitSuccess);
+            LevelPlay.OnInitFailed += e => mainThread.Enqueue(() => { initStarted = false; lastError = "init " + e.ErrorCode + ": " + e.ErrorMessage; });
+            LevelPlay.Init(LevelPlayAppKey);
         }
 
-        public bool Ready => loaded;
+        void OnInitSuccess()
+        {
+            initDone = true;
+            lastError = "cargando…";
+            ad = new LevelPlayRewardedAd(RewardedAdUnitId);
+            ad.OnAdLoaded += _ => mainThread.Enqueue(() => lastError = "");
+            ad.OnAdLoadFailed += e => mainThread.Enqueue(() =>
+            {
+                lastError = "carga " + e.ErrorCode + ": " + e.ErrorMessage;
+                Debug.LogWarning("[Ads] Load: " + e);
+                CancelInvoke(nameof(Load));
+                Invoke(nameof(Load), 10f);
+            });
+            ad.OnAdDisplayFailed += (_, e) => mainThread.Enqueue(() =>
+            {
+                Showing = false;
+                lastError = "mostrar " + e.ErrorCode + ": " + e.ErrorMessage;
+                GameManager.Instance?.UI.ShowBanner("Anuncio falló (" + lastError + ")", Color.gray);
+                var f = pendingFail; pendingReward = pendingFail = null;
+                f?.Invoke();
+                Load();
+            });
+            ad.OnAdRewarded += (_, __) => mainThread.Enqueue(() =>
+            {
+                rewarded = true;
+                if (closedPending) Finish();   // el premio llegó después de cerrar
+            });
+            ad.OnAdClosed += _ => mainThread.Enqueue(() =>
+            {
+                if (rewarded) { Finish(); return; }
+                // algunas redes avisan del premio justo después de cerrar: se espera un momento
+                closedPending = true;
+                closedTimer = 1.5f;
+            });
+            Load();
+        }
+
+        public bool Ready => ad != null && ad.IsAdReady();
 
         public void ShowRewarded(Action onReward, Action onFail = null)
         {
             if (Showing) return;
-            if (!loaded)
+            if (!Ready)
             {
                 onFail?.Invoke();
-                if (Advertisement.isInitialized) Load(); else Init();
+                if (initDone) Load(); else Init();
                 // diagnóstico visible: por qué no hay anuncio
                 GameManager.Instance?.UI.ShowBanner("Anuncio no listo (" + lastError + ")", Color.gray);
                 return;
             }
             pendingReward = onReward; pendingFail = onFail;
             Showing = true;
-            loaded = false;
-            Advertisement.Show(RewardedUnit, this);
+            rewarded = false; closedPending = false;
+            ad.ShowAd();
         }
 
-        void Load() => Advertisement.Load(RewardedUnit, this);
+        void Load() { if (ad != null && !ad.IsAdReady()) ad.LoadAd(); }
 
-        public void OnInitializationComplete() { lastError = "cargando…"; Load(); }
-        public void OnInitializationFailed(UnityAdsInitializationError error, string message)
-        {
-            lastError = "init " + error + ": " + message;
-            Debug.LogWarning("[Ads] Init: " + message);
-        }
-        public void OnUnityAdsAdLoaded(string placementId) { loaded = true; lastError = ""; }
-        public void OnUnityAdsFailedToLoad(string placementId, UnityAdsLoadError error, string message)
-        {
-            lastError = "carga " + error + ": " + message;
-            Debug.LogWarning("[Ads] Load: " + message);
-            Invoke(nameof(Load), 10f);
-        }
-        public void OnUnityAdsShowFailure(string placementId, UnityAdsShowError error, string message)
+        void Finish()
         {
             Showing = false;
-            lastError = "mostrar " + error + ": " + message;
-            GameManager.Instance?.UI.ShowBanner("Anuncio falló (" + lastError + ")", Color.gray);
-            var f = pendingFail; pendingReward = pendingFail = null;
-            f?.Invoke();
-            Load();
-        }
-        public void OnUnityAdsShowStart(string placementId) { }
-        public void OnUnityAdsShowClick(string placementId) { }
-        public void OnUnityAdsShowComplete(string placementId, UnityAdsShowCompletionState state)
-        {
-            Showing = false;
+            closedPending = false;
             var r = pendingReward; var f = pendingFail;
             pendingReward = pendingFail = null;
-            if (state == UnityAdsShowCompletionState.COMPLETED) r?.Invoke(); else f?.Invoke();
+            if (rewarded) r?.Invoke(); else f?.Invoke();
+            rewarded = false;
             Load();
+        }
+
+        void Update()
+        {
+            while (mainThread.TryDequeue(out var a)) a();
+            if (closedPending)
+            {
+                closedTimer -= Time.unscaledDeltaTime;
+                if (closedTimer <= 0) Finish();
+            }
         }
 #else
         // ---------------- Anuncio simulado (editor / sin paquete)
